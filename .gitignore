@@ -39,3 +39,14 @@
 
 # debug information files
 *.dwo
+
+# Ignore memory dump
+*.dmp
+
+# Ignore VS / VS Code settings directory
+/.vs/
+/.vscode/
+
+# Ignore Build files
+/x64/
+/TextGame/
