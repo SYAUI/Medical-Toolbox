@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ICU 常用计算器 · 血管活性药物 / FiO₂ / 氧合指数 / 肌酐清除率</title>
+<style>
+  :root{
+    --bg:#eef3fa;
+    --card:#ffffff;
+    --ink:#16263d;
+    --muted:#6b7c93;
+    --line:#dde6f2;
+    --brand:#2563eb;
+    --brand-soft:#e8f0ff;
+    --accent:#0d9488;
+    --danger:#dc2626;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    padding:24px 16px 48px;
+    font-family:"PingFang SC","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 60%),
+               radial-gradient(1000px 500px at 100% 0%, #ccfbf1 0%, transparent 55%),
+               var(--bg);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  .app{max-width:940px;margin:0 auto;}
+
+  header{text-align:center;margin-bottom:22px;}
+  header h1{
+    margin:0 0 6px;
+    font-size:26px;
+    letter-spacing:.5px;
+  }
+  header p{margin:0;color:var(--muted);font-size:14px;}
+
+  .tabs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:6px;
+    margin-bottom:18px;
+    box-shadow:0 4px 16px rgba(22,38,61,.05);
+  }
+  .tab{
+    flex:1 1 150px;
+    border:0;
+    background:transparent;
+    padding:11px 10px;
+    border-radius:10px;
+    font-size:14px;
+    font-weight:600;
+    color:var(--muted);
+    cursor:pointer;
+    transition:.18s;
+    font-family:inherit;
+  }
+  .tab:hover{background:#f5f8fd;color:var(--ink);}
+  .tab.active{
+    background:linear-gradient(135deg,#2563eb,#0ea5e9);
+    color:#fff;
+    box-shadow:0 6px 16px rgba(37,99,235,.28);
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:760px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:20px;
+    box-shadow:0 6px 24px rgba(22,38,61,.06);
+  }
+  .card h2{
+    margin:0 0 16px;
+    font-size:15px;
+    font-weight:700;
+    color:var(--brand);
+    letter-spacing:.5px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::before{
+    content:"";
+    width:4px;height:16px;
+    border-radius:2px;
+    background:linear-gradient(180deg,#2563eb,#0ea5e9);
+  }
+
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{
+    display:block;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:6px;
+    font-weight:600;
+  }
+  input,select{
+    width:100%;
+    padding:11px 13px;
+    font-size:15px;
+    font-family:inherit;
+    color:var(--ink);
+    background:#f8fbff;
+    border:1.5px solid var(--line);
+    border-radius:10px;
+    outline:none;
+    transition:.16s;
+    -moz-appearance:textfield;
+  }
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  input:focus,select:focus{
+    border-color:var(--brand);
+    background:#fff;
+    box-shadow:0 0 0 4px rgba(37,99,235,.12);
+  }
+  select{cursor:pointer;appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7c93' stroke-width='3'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat:no-repeat;
+    background-position:right 13px center;
+    padding-right:36px;
+  }
+
+  .row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+  .row-3{grid-template-columns:1fr 1fr 1fr;}
+  @media (max-width:520px){
+    .row,.row-3{grid-template-columns:1fr;}
+  }
+
+  .hidden{display:none !important;}
+
+  /* 结果区 */
+  .result-card{
+    background:linear-gradient(160deg,#12213a 0%,#1d3557 55%,#0f2a4a 100%);
+    border:0;
+    color:#e8f0ff;
+    display:flex;
+    flex-direction:column;
+  }
+  .result-card h2{color:#7dd3fc;}
+  .result-card h2::before{background:linear-gradient(180deg,#38bdf8,#22d3ee);}
+
+  .big{
+    text-align:center;
+    padding:14px 0 18px;
+    border-bottom:1px dashed rgba(125,211,252,.28);
+    margin-bottom:16px;
+  }
+  .big .val{
+    display:block;
+    font-size:46px;
+    font-weight:800;
+    line-height:1.1;
+    letter-spacing:-1px;
+    background:linear-gradient(135deg,#7dd3fc,#5eead4);
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    word-break:break-all;
+  }
+  .big .unit{
+    display:block;
+    margin-top:8px;
+    font-size:14px;
+    color:#94a3b8;
+    letter-spacing:1px;
+    font-weight:600;
+  }
+  .big .val.err{
+    font-size:20px;
+    background:none;
+    -webkit-text-fill-color:#fca5a5;
+    color:#fca5a5;
+    font-weight:600;
+    letter-spacing:0;
+  }
+
+  .details{display:flex;flex-direction:column;gap:1px;flex:1;}
+  .detail-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding:9px 4px;
+    font-size:14px;
+    border-bottom:1px solid rgba(148,163,184,.12);
+  }
+  .detail-row:last-child{border-bottom:0;}
+  .detail-row .k{color:#94a3b8;flex:0 0 auto;}
+  .detail-row .v{
+    font-weight:700;color:#e2f2ff;
+    font-variant-numeric:tabular-nums;
+    text-align:right;
+  }
+  .detail-row .v.ok{color:#5eead4;}
+  .detail-row .v.warn{color:#fbbf24;}
+  .detail-row .v.bad{color:#fca5a5;}
+
+  /* 公式区 */
+  .formula{
+    margin-top:16px;
+    background:#fff;
+  }
+  .formula code{
+    display:block;
+    background:#f1f6fd;
+    border-left:3px solid var(--brand);
+    padding:12px 14px;
+    border-radius:8px;
+    font-size:13.5px;
+    color:#1e3a5f;
+    font-family:"SFMono-Regular",Consolas,"Courier New",monospace;
+    overflow-x:auto;
+    line-height:1.7;
+    white-space:pre-wrap;
+  }
+  .tips{
+    margin-top:14px;
+    font-size:12.5px;
+    color:var(--muted);
+    line-height:1.8;
+  }
+  .tips b{color:var(--ink);}
+  .tips ul{margin:6px 0 0;padding-left:18px;}
+
+  .presets{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+    margin-top:-4px;
+    margin-bottom:14px;
+  }
+  .presets.no-top{margin-top:10px;}
+  .chip{
+    border:1px solid var(--line);
+    background:#f8fbff;
+    color:var(--muted);
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:20px;
+    cursor:pointer;
+    font-family:inherit;
+    transition:.15s;
+  }
+  .chip:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-soft);}
+
+  footer{
+    text-align:center;
+    margin-top:22px;
+    font-size:12px;
+    color:var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <h1>ICU 常用计算器</h1>
+    <p id="subtitle">剂量单位：μg/kg/min　·　适用于微量泵持续输注</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" data-view="drug" data-mode="forward">正算 · 泵速→剂量</button>
+    <button class="tab" data-view="drug" data-mode="reverse">反算 · 剂量→泵速</button>
+    <button class="tab" data-view="fio2">FiO₂ 氧浓度</button>
+    <button class="tab" data-view="pf">氧合指数</button>
+    <button class="tab" data-view="ccr">肌酐清除率</button>
+  </div>
+
+  <!-- ==================== 视图 1：血管活性药物 ==================== -->
+  <div id="viewDrug">
+    <div class="grid">
+
+      <!-- 输入区 -->
+      <section class="card">
+        <h2>参数输入</h2>
+
+        <div class="field">
+          <label>药物（选择后自动填入常用配制）</label>
+          <select id="drug"><!-- 由 PRESETS.DRUGS 生成 --></select>
+        </div>
+
+        <div class="presets" id="presets"></div>
+
+        <div class="row">
+          <div class="field">
+            <label>药物剂量 (mg)</label>
+            <input id="amount" type="number" step="any" min="0" value="20" inputmode="decimal">
+          </div>
+          <div class="field">
+            <label>配制后总量 (mL)</label>
+            <input id="volume" type="number" step="any" min="0" value="50" inputmode="decimal">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>患者体重 (kg)</label>
+          <input id="weight" type="number" step="any" min="0" value="60" inputmode="decimal">
+        </div>
+
+        <div class="field" id="rateField">
+          <label>泵速 (mL/h)</label>
+          <input id="rate" type="number" step="any" min="0" value="2" inputmode="decimal">
+        </div>
+
+        <div class="field hidden" id="doseField">
+          <label>目标剂量 (μg/kg/min)</label>
+          <input id="targetDose" type="number" step="any" min="0" value="0.1" inputmode="decimal">
+        </div>
+      </section>
+
+      <!-- 结果区 -->
+      <section class="card result-card">
+        <h2>计算结果</h2>
+        <div class="big">
+          <span class="val" id="mainValue">—</span>
+          <span class="unit" id="mainUnit">μg/kg/min</span>
+        </div>
+        <div class="details" id="details"></div>
+      </section>
+
+    </div>
+
+    <!-- 公式 -->
+    <section class="card formula">
+      <h2>计算公式</h2>
+      <code>浓度 (μg/mL) = 药物剂量(mg) × 1000 ÷ 配制后总量(mL)
+
+剂量 (μg/kg/min) = 泵速(mL/h) × 浓度(μg/mL) ÷ 60 ÷ 体重(kg)
+
+反算泵速 (mL/h) = 目标剂量(μg/kg/min) × 体重(kg) × 60 ÷ 浓度(μg/mL)</code>
+      <div class="tips">
+        <b>使用提示：</b>
+        <ul>
+          <li>“配制后总量”指药物加入溶媒后<b>最终液体的总体积</b>，而非溶媒体积。</li>
+          <li>常见误区：15 mg 药液加入 50 mL 盐水中，若药液本身占体积，最终总量可能大于 50 mL，需按实际总量计算。</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- ==================== 视图 2：FiO₂ 氧浓度 ==================== -->
+  <div id="viewFio2" class="hidden">
+    <div class="grid">
+
+      <section class="card">
+        <h2>吸氧参数</h2>
+
+        <div class="field">
+          <label>吸氧装置</label>
+          <select id="o2Device"><!-- 由 PRESETS.O2_DEVICES 生成 --></select>
+        </div>
+
+        <div class="field" id="o2FlowField">
+          <label>氧流量 (L/min)</label>
+          <input id="o2Flow" type="number" step="any" min="0" value="2" inputmode="decimal">
+        </div>
+
+        <div class="field hidden" id="o2VenturiField">
+          <label>文丘里面罩刻度</label>
+          <select id="o2Venturi"><!-- 由 PRESETS.VENTURI_LEVELS 生成 --></select>
+        </div>
+
+        <div class="tips">
+          <b>提示：</b>实际 FiO₂ 还受呼吸频率、潮气量、吸气峰流量的影响，此处为经验估算值；需要精确控制氧浓度时应使用文丘里面罩、空氧混合器或呼吸机。
+        </div>
+      </section>
+
+      <section class="card result-card">
+        <h2>估算结果</h2>
+        <div class="big">
+          <span class="val" id="fio2Value">—</span>
+          <span class="unit" id="fio2Unit">% (FiO₂)</span>
+        </div>
+        <div class="details" id="fio2Details"></div>
+      </section>
+
+    </div>
+
+    <section class="card formula">
+      <h2>估算公式</h2>
+      <code>鼻导管：   FiO₂ (%) ≈ 21 + 4 × 氧流量 (L/min)
+
+简易面罩： FiO₂ (%) ≈ 40 + 4 × (氧流量 − 5)
+
+储氧面罩： FiO₂ (%) ≈ 80 + 3 × (氧流量 − 10)
+
+文丘里面罩：按刻度恒定输出（24 / 28 / 31 / 35 / 40 / 50 %）</code>
+      <div class="tips">
+        <b>注意：</b>
+        <ul>
+          <li>以上均为经验估算公式，个体差异较大，仅供快速评估参考。</li>
+          <li>鼻导管氧流量一般不超过 6 L/min；储氧面罩需 ≥ 10 L/min 才能保证储气囊充盈。</li>
+          <li>文丘里面罩依靠高速氧流产生的负压吸入空气，氧浓度恒定，不受患者呼吸模式影响，是精确控制 FiO₂ 的首选。</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- ==================== 视图 3：氧合指数 ==================== -->
+  <div id="viewPf" class="hidden">
+    <div class="grid">
+
+      <section class="card">
+        <h2>血气参数</h2>
+
+        <div class="field">
+          <label>PaO₂（动脉血氧分压）</label>
+          <div class="row">
+            <input id="pao2" type="number" step="any" min="0" value="100" inputmode="decimal">
+            <select id="pao2Unit">
+              <option value="mmHg">mmHg</option>
+              <option value="kPa">kPa</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>FiO₂（吸入氧浓度 %）</label>
+          <input id="pfFio2" type="number" step="any" min="1" max="100" value="21" inputmode="decimal">
+        </div>
+
+        <div class="presets no-top">
+          <button type="button" class="chip" id="useFio2Btn">← 使用「FiO₂ 氧浓度」计算结果</button>
+        </div>
+
+        <div class="tips">
+          <b>判读前提：</b>柏林标准要求在外界 PEEP / CPAP ≥ 5 cmH₂O 条件下评估；高原地区及慢性 CO₂ 潴留患者需结合基础值判断。
+        </div>
+      </section>
+
+      <section class="card result-card">
+        <h2>计算结果</h2>
+        <div class="big">
+          <span class="val" id="pfValue">—</span>
+          <span class="unit" id="pfUnit">mmHg</span>
+        </div>
+        <div class="details" id="pfDetails"></div>
+      </section>
+
+    </div>
+
+    <section class="card formula">
+      <h2>计算公式</h2>
+      <code>氧合指数 (P/F) = PaO₂ (mmHg) ÷ FiO₂ (小数)
+
+例：PaO₂ = 80 mmHg，FiO₂ = 40%
+    P/F = 80 ÷ 0.40 = 200 mmHg
+
+单位换算：1 kPa = 7.5 mmHg</code>
+      <div class="tips">
+        <b>柏林标准分级（需 PEEP / CPAP ≥ 5 cmH₂O）：</b>
+        <ul>
+          <li>轻度：200 &lt; P/F ≤ 300</li>
+          <li>中度：100 &lt; P/F ≤ 200</li>
+          <li>重度：P/F ≤ 100</li>
+        </ul>
+        <b>参考：</b>P/F &gt; 400 为正常；300–400 提示轻度氧合功能下降。
+      </div>
+    </section>
+  </div>
+
+  <!-- ==================== 视图 4：肌酐清除率 Ccr ==================== -->
+  <div id="viewCcr" class="hidden">
+    <div class="grid">
+
+      <section class="card">
+        <h2>患者参数</h2>
+
+        <div class="field">
+          <label>性别</label>
+          <select id="ccrSex">
+            <option value="male">男</option>
+            <option value="female">女</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="field">
+            <label>年龄 (岁)</label>
+            <input id="ccrAge" type="number" step="1" min="1" max="120" value="60" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label>体重 (kg)</label>
+            <input id="ccrWeight" type="number" step="any" min="1" value="60" inputmode="decimal">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>血肌酐 (Scr)</label>
+          <div class="row">
+            <input id="ccrScr" type="number" step="any" min="0" value="50" inputmode="decimal">
+            <select id="ccrScrUnit">
+              <option value="umol">μmol/L</option>
+              <option value="mgdl">mg/dL</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="tips">
+          <b>说明：</b>采用 Cockcroft–Gault 公式，体重默认取<b>实际体重</b>；肥胖、水肿、消瘦患者可考虑改用理想体重（IBW）或调整体重，结果需结合临床判断。
+        </div>
+      </section>
+
+      <section class="card result-card">
+        <h2>计算结果</h2>
+        <div class="big">
+          <span class="val" id="ccrValue">—</span>
+          <span class="unit" id="ccrUnit">mL/min</span>
+        </div>
+        <div class="details" id="ccrDetails"></div>
+      </section>
+
+    </div>
+
+    <section class="card formula">
+      <h2>计算公式</h2>
+      <code>Ccr (mL/min) = (140 − 年龄) × 体重(kg) ÷ [ 72 × Scr(mg/dL) ] × 性别系数
+
+Scr 单位换算：1 mg/dL = 88.4 μmol/L
+性别系数：男性 = 1.00，女性 = 0.85
+
+例：男，60 岁，60 kg，Scr 88.4 μmol/L（= 1.0 mg/dL）
+    Ccr = (140 − 60) × 60 ÷ (72 × 1.0) = 66.7 mL/min</code>
+      <div class="tips">
+        <b>使用提示：</b>
+        <ul>
+          <li>本公式为 <b>Cockcroft–Gault 公式</b>，估算肌酐清除率，常用于<b>药物剂量调整</b>（抗菌药物、DOAC 等）。</li>
+          <li>血肌酐受肌肉量、饮食、药物影响；<b>急性肾损伤、肾功能快速变化时不可靠</b>。</li>
+          <li>正常参考范围约 80–120 mL/min，随年龄增长生理性下降。</li>
+          <li>如需 eGFR（CKD-EPI 等），请使用实验室报告，二者不可互换。</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <footer>仅供参考</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ==================================================================
+   * 	集中预设区：所有常量 / 公式参数 / 文案均在此处维护
+   * ================================================================== */
+  const PRESETS = {
+
+    /* ---------- 通用单位换算 ---------- */
+    UNITS: {
+      KPA_TO_MMHG:   7.5,    // 1 kPa = 7.5 mmHg
+      UMOL_PER_MGDL: 88.4    // 1 mg/dL = 88.4 μmol/L
+    },
+
+    /* ---------- 血管活性药物：常用配制 ---------- */
+    DRUGS: {
+      norepinephrine: { name:"去甲肾上腺素", amount:20,  volume:50  },
+      epinephrine:    { name:"肾上腺素",     amount:1,   volume:50  },
+      dopamine:       { name:"多巴胺",       amount:200, volume:50  },
+      dobutamine:     { name:"多巴酚丁胺",   amount:250, volume:50  },
+      nitroprusside:  { name:"硝普钠",       amount:25,  volume:50  },
+      nitroglycerin:  { name:"硝酸甘油",     amount:10,  volume:50  },
+      milrinone:      { name:"米力农",       amount:20,  volume:100 },
+      isoproterenol:  { name:"异丙肾上腺素", amount:1,   volume:50  }
+    },
+
+    /* ---------- 血管活性药物：快捷按钮 ---------- */
+    DRUG_CHIPS: [
+      { label:"去甲肾上腺素 20mg/50mL", amount:20,  volume:50 },
+      { label:"多巴胺 200mg/50mL",     amount:200, volume:50 },
+      { label:"肾上腺素 1mg/50mL",     amount:1,   volume:50 },
+      { label:"硝普钠 25mg/50mL",      amount:25,  volume:50 }
+    ],
+
+    /* ---------- 氧疗装置：估算公式与量程 ---------- */
+    O2_DEVICES: {
+      nc: {
+        name:"鼻导管 / 鼻塞", min:1, max:6, cap:45,
+        formula:"FiO₂ = 21 + 4 × 氧流量",
+        fn: f => 21 + 4 * f
+      },
+      mask: {
+        name:"简易面罩", min:5, max:10, cap:60,
+        formula:"FiO₂ = 40 + 4 × (氧流量 − 5)",
+        fn: f => 40 + 4 * (f - 5)
+      },
+      reservoir: {
+        name:"储氧面罩（非重复吸入）", min:10, max:15, cap:95,
+        formula:"FiO₂ = 80 + 3 × (氧流量 − 10)",
+        fn: f => 80 + 3 * (f - 10)
+      }
+    },
+
+    /* ---------- 文丘里面罩刻度 ---------- */
+    VENTURI_LEVELS: [24, 28, 31, 35, 40, 50],
+
+    /* ---------- 肌酐清除率：肾功能分级（按 Ccr 从高到低排列） ---------- */
+    CCR_GRADES: [
+      { min:90,        text:"正常或轻度下降（G1）", cls:"ok"   },
+      { min:60,        text:"轻度下降（G2）",       cls:"ok"   },
+      { min:45,        text:"轻至中度下降（G3a）",  cls:"warn" },
+      { min:30,        text:"中至重度下降（G3b）",  cls:"warn" },
+      { min:15,        text:"重度下降（G4）",       cls:"bad"  },
+      { min:-Infinity, text:"肾衰竭（G5）",         cls:"bad"  }
+    ],
+
+    /* ---------- 各视图副标题文案 ---------- */
+    SUBTITLE: {
+      drug: "剂量单位：μg/kg/min　·　适用于微量泵持续输注",
+      fio2: "根据吸氧装置与氧流量估算吸入氧浓度（FiO₂）",
+      pf:   "PaO₂ ÷ FiO₂，用于评估氧合功能与 ARDS 分级",
+      ccr:  "Cockcroft–Gault 公式估算肌酐清除率，用于药物剂量调整"
+    }
+  };
+
+  /* ==================================================================
+   * 元素引用
+   * ================================================================== */
+  const $ = id => document.getElementById(id);
+
+  // 视图 1：血管活性药物
+  const elAmount   = $("amount");
+  const elVolume   = $("volume");
+  const elWeight   = $("weight");
+  const elRate     = $("rate");
+  const elTarget   = $("targetDose");
+  const elDrug     = $("drug");
+  const elPresets  = $("presets");
+  const rateField  = $("rateField");
+  const doseField  = $("doseField");
+  const mainValue  = $("mainValue");
+  const mainUnit   = $("mainUnit");
+  const detailsBox = $("details");
+
+  // 视图 2：FiO₂
+  const elO2Device     = $("o2Device");
+  const elO2Flow       = $("o2Flow");
+  const elO2Venturi    = $("o2Venturi");
+  const o2FlowField    = $("o2FlowField");
+  const o2VenturiField = $("o2VenturiField");
+  const fio2Value      = $("fio2Value");
+  const fio2Unit       = $("fio2Unit");
+  const fio2Details    = $("fio2Details");
+
+  // 视图 3：氧合指数
+  const elPao2     = $("pao2");
+  const elPao2Unit = $("pao2Unit");
+  const elPfFio2   = $("pfFio2");
+  const pfValue    = $("pfValue");
+  const pfUnit     = $("pfUnit");
+  const pfDetails  = $("pfDetails");
+  const useFio2Btn = $("useFio2Btn");
+
+  // 视图 4：肌酐清除率
+  const elCcrSex    = $("ccrSex");
+  const elCcrAge    = $("ccrAge");
+  const elCcrWeight = $("ccrWeight");
+  const elCcrScr    = $("ccrScr");
+  const elCcrUnit   = $("ccrScrUnit");
+  const ccrValue    = $("ccrValue");
+  const ccrUnit     = $("ccrUnit");
+  const ccrDetails  = $("ccrDetails");
+
+  // 视图容器 / 副标题
+  const views = {
+    drug: $("viewDrug"),
+    fio2: $("viewFio2"),
+    pf:   $("viewPf"),
+    ccr:  $("viewCcr")
+  };
+  const subtitleEl = $("subtitle");
+
+  let mode = "forward";   // forward | reverse
+  let lastFio2 = null;    // 供氧合指数一键引用
+
+  /* ==================================================================
+   * 通用工具
+   * ================================================================== */
+  function num(el){
+    const v = parseFloat(el.value);
+    return isNaN(v) ? null : v;
+  }
+  function fmt(n, d){
+    if (!isFinite(n)) return "—";
+    return n.toFixed(d === undefined ? 2 : d);
+  }
+  // 智能有效数字：剂量很小时多保留一位
+  function fmtDose(n){
+    if (!isFinite(n)) return "—";
+    if (n === 0) return "0.00";
+    if (n < 0.01) return n.toFixed(4);
+    if (n < 0.1)  return n.toFixed(3);
+    return n.toFixed(2);
+  }
+
+  // rows: [ [键, 值, 可选样式类] , ... ]
+  function renderTo(vEl, uEl, dEl, main, unit, rows){
+    vEl.classList.remove("err");
+    vEl.textContent = main;
+    uEl.textContent = unit;
+    dEl.innerHTML = rows.map(function(r){
+      return '<div class="detail-row"><span class="k">' + r[0] +
+             '</span><span class="v' + (r[2] ? " " + r[2] : "") + '">' + r[1] + '</span></div>';
+    }).join("");
+  }
+
+  function showErrorTo(vEl, uEl, dEl, msg){
+    vEl.textContent = msg;
+    vEl.classList.add("err");
+    uEl.textContent = "";
+    dEl.innerHTML = "";
+  }
+
+  /* ==================================================================
+   * 视图 1：血管活性药物
+   * ================================================================== */
+  function calculate(){
+    const amount = num(elAmount);
+    const volume = num(elVolume);
+    const weight = num(elWeight);
+
+    if (amount === null || amount <= 0 || volume === null || volume <= 0){
+      showErrorTo(mainValue, mainUnit, detailsBox, "请输入有效的药物剂量与配制总量");
+      return;
+    }
+    if (weight === null || weight <= 0){
+      showErrorTo(mainValue, mainUnit, detailsBox, "请输入有效的患者体重");
+      return;
+    }
+
+    // 浓度 μg/mL
+    const conc = amount * 1000 / volume;
+
+    if (mode === "forward"){
+      const rate = num(elRate);
+      if (rate === null || rate < 0){
+        showErrorTo(mainValue, mainUnit, detailsBox, "请输入有效的泵速");
+        return;
+      }
+
+      const ugPerMin  = rate * conc / 60;          // μg/min
+      const ugPerHour = ugPerMin * 60;             // μg/h
+      const dose      = ugPerMin / weight;         // μg/kg/min
+
+      renderTo(mainValue, mainUnit, detailsBox, fmtDose(dose), "μg/kg/min", [
+        ["药物浓度",       fmt(conc, 1) + " μg/mL"],
+        ["输注速率",       fmt(ugPerMin, 2) + " μg/min"],
+        ["每小时输注量",   fmt(ugPerHour, 1) + " μg/h"],
+        ["每小时药量",     fmt(ugPerHour / 1000, 3) + " mg/h"],
+        ["当前泵速",       fmt(rate, 2) + " mL/h"],
+        ["患者体重",       fmt(weight, 1) + " kg"]
+      ]);
+
+    } else {
+      const target = num(elTarget);
+      if (target === null || target < 0){
+        showErrorTo(mainValue, mainUnit, detailsBox, "请输入有效的目标剂量");
+        return;
+      }
+
+      const rate      = target * weight * 60 / conc;  // mL/h
+      const ugPerMin  = target * weight;              // μg/min
+      const ugPerHour = ugPerMin * 60;                // μg/h
+
+      renderTo(mainValue, mainUnit, detailsBox, fmt(rate, 2), "mL/h", [
+        ["药物浓度",       fmt(conc, 1) + " μg/mL"],
+        ["目标剂量",       fmtDose(target) + " μg/kg/min"],
+        ["输注速率",       fmt(ugPerMin, 2) + " μg/min"],
+        ["每小时输注量",   fmt(ugPerHour, 1) + " μg/h"],
+        ["每小时药量",     fmt(ugPerHour / 1000, 3) + " mg/h"],
+        ["患者体重",       fmt(weight, 1) + " kg"]
+      ]);
+    }
+  }
+
+  /* ---------- 由 PRESETS 生成药物下拉框 ---------- */
+  function buildDrugSelect(){
+    elDrug.innerHTML = Object.keys(PRESETS.DRUGS).map(function(k){
+      return '<option value="' + k + '">' + PRESETS.DRUGS[k].name + '</option>';
+    }).join("") + '<option value="custom">自定义</option>';
+    elDrug.value = "norepinephrine";
+  }
+
+  /* ---------- 由 PRESETS 生成快捷预设按钮 ---------- */
+  function buildPresets(){
+    elPresets.innerHTML = PRESETS.DRUG_CHIPS.map(function(p, i){
+      return '<button type="button" class="chip" data-i="' + i + '">' + p.label + '</button>';
+    }).join("");
+
+    elPresets.addEventListener("click", function(e){
+      const btn = e.target.closest(".chip");
+      if (!btn) return;
+      const p = PRESETS.DRUG_CHIPS[+btn.dataset.i];
+      elAmount.value = p.amount;
+      elVolume.value = p.volume;
+      elDrug.value = "custom";
+      calculate();
+    });
+  }
+
+  /* ---------- 药物选择 ---------- */
+  elDrug.addEventListener("change", function(){
+    const d = PRESETS.DRUGS[elDrug.value];
+    if (d){
+      elAmount.value = d.amount;
+      elVolume.value = d.volume;
+    }
+    calculate();
+  });
+
+  /* ==================================================================
+   * 视图 2：FiO₂ 氧浓度
+   * ================================================================== */
+  function buildO2Selects(){
+    const opts = Object.keys(PRESETS.O2_DEVICES).map(function(k){
+      return '<option value="' + k + '">' + PRESETS.O2_DEVICES[k].name + '</option>';
+    }).join("");
+    elO2Device.innerHTML = opts + '<option value="venturi">文丘里面罩</option>';
+    elO2Device.value = "nc";
+
+    elO2Venturi.innerHTML = PRESETS.VENTURI_LEVELS.map(function(v){
+      return '<option value="' + v + '">' + v + ' %</option>';
+    }).join("");
+  }
+
+  function syncO2Fields(){
+    const v = elO2Device.value;
+    o2FlowField.classList.toggle("hidden", v === "venturi");
+    o2VenturiField.classList.toggle("hidden", v !== "venturi");
+  }
+
+  function calcFio2(){
+    const dev = elO2Device.value;
+    let fio2 = null, devName = "", flowTxt = null, method = "", warn = "";
+
+    if (dev === "venturi"){
+      fio2    = parseFloat(elO2Venturi.value);
+      devName = "文丘里面罩";
+      method  = "文丘里面罩按刻度恒定输出氧浓度";
+    } else {
+      const cfg = PRESETS.O2_DEVICES[dev];
+      const f = num(elO2Flow);
+
+      if (f === null || f < 0){
+        showErrorTo(fio2Value, fio2Unit, fio2Details, "请输入有效的氧流量");
+        lastFio2 = null;
+        return;
+      }
+
+      devName = cfg.name;
+      flowTxt = fmt(f, 1) + " L/min";
+      method  = cfg.formula;
+
+      if (f < cfg.min){
+        warn = "氧流量低于常用范围（" + cfg.min + "–" + cfg.max + " L/min），估算偏差较大";
+      } else if (f > cfg.max){
+        warn = "氧流量超出常用范围（" + cfg.min + "–" + cfg.max + " L/min），已按该装置上限估算";
+      }
+
+      fio2 = Math.min(Math.max(cfg.fn(f), 21), cfg.cap);
+    }
+
+    lastFio2 = fio2;
+
+    const rows = [["吸氧装置", devName]];
+    if (flowTxt !== null) rows.push(["氧流量", flowTxt]);
+    rows.push(["估算公式", method]);
+    rows.push(["氧浓度分级",
+      fio2 >= 60 ? "高浓度吸氧" : (fio2 >= 35 ? "中等浓度吸氧" : "低浓度吸氧")]);
+    if (warn) rows.push(["提示", warn, "warn"]);
+
+    renderTo(fio2Value, fio2Unit, fio2Details, fmt(fio2, 0), "% (FiO₂)", rows);
+  }
+
+  elO2Device.addEventListener("change", function(){
+    syncO2Fields();
+    calcFio2();
+  });
+  elO2Flow.addEventListener("input", calcFio2);
+  elO2Flow.addEventListener("change", calcFio2);
+  elO2Venturi.addEventListener("change", calcFio2);
+
+  /* ==================================================================
+   * 视图 3：氧合指数
+   * ================================================================== */
+  function pfGrade(pf){
+    if (pf > 400) return { text:"正常范围",              cls:"ok"   };
+    if (pf > 300) return { text:"轻度氧合功能下降",      cls:"warn" };
+    if (pf > 200) return { text:"轻度 ARDS（柏林标准）", cls:"warn" };
+    if (pf > 100) return { text:"中度 ARDS（柏林标准）", cls:"bad"  };
+    return               { text:"重度 ARDS（柏林标准）", cls:"bad"  };
+  }
+
+  function calcPF(){
+    const raw  = num(elPao2);
+    const unit = elPao2Unit.value;
+    const fio2 = num(elPfFio2);
+
+    if (raw === null || raw <= 0){
+      showErrorTo(pfValue, pfUnit, pfDetails, "请输入有效的 PaO₂");
+      return;
+    }
+    if (fio2 === null || fio2 <= 0 || fio2 > 100){
+      showErrorTo(pfValue, pfUnit, pfDetails, "FiO₂ 请输入 1–100 之间的数值");
+      return;
+    }
+
+    const pao2 = (unit === "kPa") ? raw * PRESETS.UNITS.KPA_TO_MMHG : raw;
+    const pf   = pao2 / (fio2 / 100);
+    const g    = pfGrade(pf);
+
+    const pao2Txt = fmt(pao2, 1) + " mmHg" +
+      (unit === "kPa" ? "（由 " + fmt(raw, 2) + " kPa 换算）" : "");
+
+    renderTo(pfValue, pfUnit, pfDetails, fmt(pf, 0), "mmHg（P/F）", [
+      ["PaO₂",            pao2Txt],
+      ["FiO₂",            fmt(fio2, 0) + " %"],
+      ["FiO₂（小数）",     fmt(fio2 / 100, 2)],
+      ["氧合指数 (P/F)",   fmt(pf, 1) + " mmHg", g.cls],
+      ["氧合分级",         g.text, g.cls]
+    ]);
+  }
+
+  elPao2.addEventListener("input", calcPF);
+  elPfFio2.addEventListener("input", calcPF);
+
+  elPao2Unit.addEventListener("change", function(){
+    const v = num(elPao2);
+    if (v !== null && v > 0){
+      elPao2.value = (this.value === "kPa")
+        ? (v / PRESETS.UNITS.KPA_TO_MMHG).toFixed(1)
+        : (v * PRESETS.UNITS.KPA_TO_MMHG).toFixed(0);
+    }
+    calcPF();
+  });
+
+  useFio2Btn.addEventListener("click", function(){
+    if (lastFio2 === null) return;
+    elPfFio2.value = Math.round(lastFio2);
+    calcPF();
+  });
+
+  /* ==================================================================
+   * 视图 4：肌酐清除率 Ccr（Cockcroft–Gault）
+   * ================================================================== */
+  function ccrGrade(ccr){
+    for (let i = 0; i < PRESETS.CCR_GRADES.length; i++){
+      if (ccr >= PRESETS.CCR_GRADES[i].min) return PRESETS.CCR_GRADES[i];
+    }
+    return PRESETS.CCR_GRADES[PRESETS.CCR_GRADES.length - 1];
+  }
+
+  function calcCcr(){
+    const age = num(elCcrAge);
+    const wt  = num(elCcrWeight);
+    const scr = num(elCcrScr);
+    const unit = elCcrUnit.value;
+    const isFemale = elCcrSex.value === "female";
+
+    if (age === null || age <= 0 || age >= 140){
+      showErrorTo(ccrValue, ccrUnit, ccrDetails, "请输入有效年龄（1–139 岁）");
+      return;
+    }
+    if (wt === null || wt <= 0){
+      showErrorTo(ccrValue, ccrUnit, ccrDetails, "请输入有效体重");
+      return;
+    }
+    if (scr === null || scr <= 0){
+      showErrorTo(ccrValue, ccrUnit, ccrDetails, "请输入有效血肌酐值");
+      return;
+    }
+
+    // 统一换算为 mg/dL
+    const scrMgdl = (unit === "umol")
+      ? scr / PRESETS.UNITS.UMOL_PER_MGDL
+      : scr;
+
+    const sexFactor = isFemale ? 0.85 : 1;
+    const ccr = (140 - age) * wt / (72 * scrMgdl) * sexFactor;
+    const g   = ccrGrade(ccr);
+
+    const scrTxt = (unit === "umol")
+      ? fmt(scr, 1) + " μmol/L → " + fmt(scrMgdl, 2) + " mg/dL"
+      : fmt(scrMgdl, 2) + " mg/dL";
+
+    renderTo(ccrValue, ccrUnit, ccrDetails, fmt(ccr, 1), "mL/min", [
+      ["血肌酐 (Scr)",   scrTxt],
+      ["年龄",           fmt(age, 0) + " 岁"],
+      ["体重",           fmt(wt, 1) + " kg"],
+      ["性别系数",       isFemale ? "0.85（女）" : "1.00（男）"],
+      ["肌酐清除率",     fmt(ccr, 1) + " mL/min", g.cls],
+      ["肾功能分级",     g.text, g.cls]
+    ]);
+  }
+
+  elCcrAge.addEventListener("input", calcCcr);
+  elCcrWeight.addEventListener("input", calcCcr);
+  elCcrScr.addEventListener("input", calcCcr);
+  elCcrSex.addEventListener("change", calcCcr);
+
+  // 血肌酐单位切换时自动换算数值
+  elCcrUnit.addEventListener("change", function(){
+    const v = num(elCcrScr);
+    if (v !== null && v > 0){
+      elCcrScr.value = (this.value === "mgdl")
+        ? (v / PRESETS.UNITS.UMOL_PER_MGDL).toFixed(2)
+        : (v * PRESETS.UNITS.UMOL_PER_MGDL).toFixed(1);
+    }
+    calcCcr();
+  });
+
+  /* ==================================================================
+   * 视图切换
+   * ================================================================== */
+  document.querySelectorAll(".tab").forEach(function(tab){
+    tab.addEventListener("click", function(){
+      document.querySelectorAll(".tab").forEach(function(t){
+        t.classList.remove("active");
+      });
+      tab.classList.add("active");
+
+      const view    = tab.dataset.view;
+      const newMode = tab.dataset.mode;
+      if (newMode) mode = newMode;
+
+      Object.keys(views).forEach(function(k){
+        views[k].classList.toggle("hidden", k !== view);
+      });
+      subtitleEl.textContent = PRESETS.SUBTITLE[view];
+
+      if (view === "drug"){
+        rateField.classList.toggle("hidden", mode !== "forward");
+        doseField.classList.toggle("hidden", mode !== "reverse");
+        mainUnit.textContent = (mode === "forward") ? "μg/kg/min" : "mL/h";
+        calculate();
+      } else if (view === "fio2"){
+        calcFio2();
+      } else if (view === "pf"){
+        calcPF();
+      } else if (view === "ccr"){
+        calcCcr();
+      }
+    });
+  });
+
+  /* ==================================================================
+   * 输入事件绑定（血管活性药物）
+   * ================================================================== */
+  [elAmount, elVolume, elWeight, elRate, elTarget].forEach(function(el){
+    el.addEventListener("input", calculate);
+    el.addEventListener("change", calculate);
+  });
+
+  /* ==================================================================
+   * 初始化
+   * ================================================================== */
+  buildDrugSelect();     // 生成药物下拉框
+  buildPresets();        // 生成快捷预设按钮
+  buildO2Selects();      // 生成吸氧装置 / 文丘里刻度下拉框
+  syncO2Fields();        // 同步氧流量 / 文丘里字段显隐
+
+  calculate();
+  calcFio2();
+  calcPF();
+  calcCcr();
+
+})();
+</script>
+</body>
+</html>
