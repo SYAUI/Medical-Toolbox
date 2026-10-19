@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>血气分析助手 + CRRT 参数辅助调整</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --border: #e2e8f0;
+    --text: #1e293b; --muted: #64748b;
+    --blue: #2563eb; --blue-bg: #eff6ff;
+    --green: #16a34a; --green-bg: #f0fdf4;
+    --amber: #d97706; --amber-bg: #fffbeb;
+    --red: #dc2626; --red-bg: #fef2f2;
+    --purple: #7c3aed; --purple-bg: #f5f3ff;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.55; padding: 24px;
+  }
+  .app { max-width: 1120px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 15px; font-weight: 650; margin-bottom: 12px; }
+  textarea {
+    width: 100%; min-height: 110px; padding: 12px 14px; border: 1px solid var(--border);
+    border-radius: 8px; font-family: "SF Mono", Consolas, monospace; font-size: 12.5px;
+    line-height: 1.6; resize: vertical; color: var(--text); background: #fafbfc;
+  }
+  textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  .inline-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .inline-row label { font-size: 13px; font-weight: 550; color: var(--muted); white-space: nowrap; }
+  input[type="number"] {
+    width: 100px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 14px; font-weight: 600; color: var(--text);
+  }
+  input[type="number"]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  .unit-toggle { display: flex; gap: 6px; }
+  .unit-toggle button {
+    padding: 6px 12px; border: 1px solid var(--border); background: #fff; border-radius: 6px;
+    font-size: 12px; cursor: pointer; color: var(--muted); transition: all .15s;
+  }
+  .unit-toggle button.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .btn-run {
+    margin-top: 14px; padding: 10px 28px; background: var(--blue); color: #fff; border: none;
+    border-radius: 8px; font-size: 14px; font-weight: 650; cursor: pointer;
+  }
+  .btn-run:hover { background: #1d4ed8; }
+  .error {
+    margin-top: 10px; padding: 10px 14px; background: var(--red-bg); color: var(--red);
+    border-radius: 7px; font-size: 13px; display: none;
+  }
+  .crrt-toggle-row {
+    display: flex; align-items: center; gap: 10px; margin-top: 16px;
+    padding-top: 14px; border-top: 1px dashed var(--border);
+  }
+  .crrt-toggle-row label { font-size: 13.5px; font-weight: 650; color: var(--purple); cursor: pointer; }
+  input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--purple); cursor: pointer; }
+  .crrt-form { display: none; margin-top: 14px; }
+  .crrt-form.open { display: block; }
+  .crrt-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 16px;
+    background: #faf8ff; border: 1px solid #e9e0ff; border-radius: 9px; padding: 14px 16px;
+  }
+  .crrt-grid label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 550; }
+  .crrt-grid input[type="number"], .crrt-grid select {
+    width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; color: var(--text); background: #fff;
+  }
+  .crrt-grid .full { grid-column: 1 / -1; }
+  .crrt-hint { font-size: 11.5px; color: var(--purple); margin-top: 8px; line-height: 1.6; }
+  .crrt-section-title {
+    grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: var(--purple);
+    margin-top: 4px; padding-top: 8px; border-top: 1px dashed #e9e0ff;
+  }
+  .crrt-section-title:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  .rca-only { display: none; }
+  .ca-warn {
+    grid-column: 1 / -1; padding: 8px 12px; background: var(--amber-bg);
+    border: 1px solid #fde68a; color: #92400e; border-radius: 7px; font-size: 12px;
+    display: none; margin-top: 6px;
+  }
+  #results { display: none; }
+  .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 20px; font-size: 12.5px; font-weight: 650; }
+  .badge.red { background: var(--red-bg); color: var(--red); }
+  .badge.green { background: var(--green-bg); color: var(--green); }
+  .badge.amber { background: var(--amber-bg); color: var(--amber); }
+  .badge.blue { background: var(--blue-bg); color: var(--blue); }
+  .badge.purple { background: var(--purple-bg); color: var(--purple); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .card h3 { font-size: 13.5px; font-weight: 650; color: var(--muted); margin-bottom: 10px; letter-spacing: .02em; }
+  .card ul { list-style: none; }
+  .card li { padding: 7px 0; border-bottom: 1px solid #f1f5f9; font-size: 13.5px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .card li:last-child { border-bottom: none; }
+  .card li .label { color: var(--muted); flex-shrink: 0; }
+  .card li .val { font-weight: 600; text-align: right; }
+  .card li .val.low { color: var(--blue); }
+  .card li .val.high { color: var(--red); }
+  .card li .val.normal { color: var(--green); }
+  .conclusion {
+    background: var(--blue-bg); border: 1px solid #bfdbfe; border-radius: 8px;
+    padding: 14px 16px; margin-top: 12px; font-size: 14px; font-weight: 550; color: #1e40af; line-height: 1.7;
+  }
+  .conclusion.warn { background: var(--amber-bg); border-color: #fde68a; color: #92400e; }
+  .conclusion.danger { background: var(--red-bg); border-color: #fecaca; color: #991b1b; }
+  .conclusion.ok { background: var(--green-bg); border-color: #bbf7d0; color: #166534; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  .crrt-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  .crrt-table th {
+    text-align: left; padding: 8px 10px; background: #f8fafc; color: var(--muted);
+    font-weight: 600; font-size: 12px; border-bottom: 1px solid var(--border);
+  }
+  .crrt-table td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .crrt-table tr:last-child td { border-bottom: none; }
+  .action-up { color: var(--red); font-weight: 700; }
+  .action-down { color: var(--blue); font-weight: 700; }
+  .action-keep { color: var(--green); font-weight: 700; }
+  .action-caution { color: var(--amber); font-weight: 700; }
+  .crrt-alert {
+    margin-top: 10px; padding: 12px 15px; border-radius: 8px; font-size: 13px; line-height: 1.65;
+  }
+  .crrt-alert.danger { background: var(--red-bg); border: 1px solid #fecaca; color: #991b1b; }
+  .crrt-alert.warn { background: var(--amber-bg); border: 1px solid #fde68a; color: #92400e; }
+  .crrt-alert.info { background: var(--purple-bg); border: 1px solid #ddd6fe; color: #5b21b6; }
+  .crrt-current-box {
+    background: #f8fafc; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 15px; margin-bottom: 12px; font-size: 13px;
+  }
+  .crrt-current-box strong { color: var(--purple); }
+  .crrt-current-box .item { display: inline-block; margin-right: 16px; white-space: nowrap; }
+  .crrt-legend {
+    display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted);
+    margin: 4px 0 10px; padding: 8px 12px; background: #f8fafc; border-radius: 7px;
+  }
+  .crrt-legend b { font-weight: 700; }
+  @media (max-width: 600px) { body { padding: 14px; } .cards { grid-template-columns: 1fr; } .crrt-table { font-size: 12px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>血气分析助手</h1>
+  <p class="subtitle">粘贴血气结果 · 输入 FiO₂ · 可选 CRRT 参数辅助调整</p>
+
+  <div class="panel">
+    <h2>① 粘贴血气结果</h2>
+    <textarea id="input" placeholder="直接粘贴血气分析报告文本，箭头 ↓ ↑ 会自动去除；支持全角冒号和换行分隔"></textarea>
+    <div class="inline-row">
+      <label for="fio2">FiO₂</label>
+      <input type="number" id="fio2" value="21" min="21" max="100" step="1">
+      <div class="unit-toggle">
+        <button type="button" data-unit="percent" class="active">%</button>
+        <button type="button" data-unit="fraction">小数</button>
+      </div>
+      <span id="fio2-hint" class="note" style="margin:0;">当前：21%（室内空气）</span>
+    </div>
+    <div class="inline-row">
+      <label for="albumin">白蛋白 (g/L)</label>
+      <input type="number" id="albumin" placeholder="可选，用于 AG 校正" min="10" max="60" step="0.1">
+      <span class="note" style="margin:0;">低白蛋白时 AG 会被低估，填写后可校正</span>
+    </div>
+
+    <div class="crrt-toggle-row">
+      <input type="checkbox" id="crrt-enable">
+      <label for="crrt-enable">患者正在接受 CRRT（可选，展开后填写当前处方）</label>
+    </div>
+
+    <div class="crrt-form" id="crrt-form">
+      <div class="crrt-grid">
+        <div class="crrt-section-title">基础信息</div>
+        <div>
+          <label>患者体重 (kg)</label>
+          <input type="number" id="crrt-weight" placeholder="如 60" min="20" max="200" step="0.1">
+        </div>
+        <div>
+          <label>抗凝方式</label>
+          <select id="crrt-anticoag">
+            <option value="none">无抗凝 / 全身抗凝</option>
+            <option value="rca" selected>局部枸橼酸抗凝 (RCA)</option>
+            <option value="nafamostat">甲磺酸萘莫司他</option>
+            <option value="heparin">肝素抗凝</option>
+          </select>
+        </div>
+        <div>
+          <label>CRRT 剂量 (mL/kg/h，可选)</label>
+          <input type="number" id="crrt-dose" placeholder="如 25" min="0" max="80" step="1">
+        </div>
+
+        <div class="crrt-section-title">置换液处方</div>
+        <div class="full">
+          <label>常见配方预设（可选）</label>
+          <select id="crrt-preset">
+            <option value="">自定义（手动填写下方参数）</option>
+            <option value="custom_low_na">自配低钠基础液（Na 113 / Cl 118 / K 0 / Ca 0）</option>
+            <option value="prismasol4">Prismasol 4（Na 140 / Cl 109.5 / K 4 / Ca 1.75）</option>
+            <option value="prismasol_b0">Prismasol B0（Na 140 / Cl 109.5 / K 0 / Ca 0）</option>
+          </select>
+        </div>
+        <div>
+          <label>置换液总量（最终配好总量，ml）</label>
+          <input type="number" id="crrt-volume" placeholder="如 4000" min="500" max="100000" step="50">
+        </div>
+        <div>
+          <label>基础置换液 Na⁺ (mmol/L)</label>
+          <input type="number" id="crrt-base-na" value="113" min="80" max="160" step="1">
+        </div>
+        <div>
+          <label>基础置换液 Cl⁻ (mmol/L)</label>
+          <input type="number" id="crrt-base-cl" value="118" min="60" max="160" step="1">
+        </div>
+        <div>
+          <label>基础置换液 K⁺ (mmol/L)</label>
+          <input type="number" id="crrt-base-k" value="0" min="0" max="8" step="0.1">
+        </div>
+        <div>
+          <label>基础置换液 Ca²⁺ (mmol/L)</label>
+          <input type="number" id="crrt-base-ca" value="1.60" min="0" max="2" step="0.01">
+        </div>
+        <div class="ca-warn" id="ca-warn-hint"></div>
+
+        <div class="crrt-section-title">加入的药物</div>
+        <div>
+          <label>加入氯化钾 KCl (g)</label>
+          <input type="number" id="crrt-kcl" placeholder="如 1.0" min="0" max="10" step="0.01">
+        </div>
+        <div>
+          <label>加入氯化钠 NaCl (g)</label>
+          <input type="number" id="crrt-nacl" placeholder="如 0" min="0" max="30" step="0.01">
+        </div>
+        <div>
+          <label>加入 5% 碳酸氢钠 (ml)【250ml:12.5g】</label>
+          <input type="number" id="crrt-nahco3" placeholder="如 250" min="0" max="1000" step="5">
+        </div>
+        <div>
+          <label>加入钙剂类型</label>
+          <select id="crrt-ca-type">
+            <option value="none">不加钙</option>
+            <option value="gluconate">葡萄糖酸钙（按 g 计）</option>
+            <option value="cacl2">氯化钙（按 g 计，CaCl₂·2H₂O）</option>
+          </select>
+        </div>
+        <div>
+          <label>加入钙剂 (g)</label>
+          <input type="number" id="crrt-ca-g" placeholder="如 0" min="0" max="20" step="0.01">
+        </div>
+
+        <div class="crrt-section-title">额外静脉补充（可选）</div>
+        <div>
+          <label>额外静脉 NaHCO₃ (mmol/h)</label>
+          <input type="number" id="crrt-extra-nahco3" placeholder="未输注填 0" min="0" max="200" step="0.1">
+        </div>
+        <div>
+          <label>额外静脉补钾 (mmol/h)</label>
+          <input type="number" id="crrt-extra-k" placeholder="未补钾填 0" min="0" max="40" step="0.1">
+        </div>
+
+        <div class="crrt-section-title rca-only">RCA 专项参数</div>
+        <div class="rca-only">
+          <label>枸橼酸流速 (mmol/h)</label>
+          <input type="number" id="crrt-citrate" placeholder="如 18" min="0" max="80" step="0.1">
+        </div>
+        <div class="rca-only">
+          <label>静脉补钙速度 (mmol/h，元素钙)</label>
+          <input type="number" id="crrt-ca-rate" placeholder="如 4.0" min="0" max="50" step="0.1">
+        </div>
+        <div class="rca-only">
+          <label>滤器后 iCa (mmol/L，可选)</label>
+          <input type="number" id="crrt-postfilter-ica" placeholder="如 0.30" min="0" max="1.5" step="0.01">
+        </div>
+      </div>
+      <p class="crrt-hint">
+        计算依据：5% NaHCO₃ 规格 250 ml : 12.5 g（约 595 mmol/L）；KCl 1 g ≈ 13.4 mmol K⁺；NaCl 1 g ≈ 17.1 mmol Na⁺；葡萄糖酸钙 1 g ≈ 2.23 mmol Ca²⁺；氯化钙（CaCl₂·2H₂O）1 g ≈ 6.80 mmol Ca²⁺。
+        <strong>若加入较多 NaHCO₃，建议使用低钠基础液（Na⁺ 100–120 mmol/L）</strong>，以免最终 Na⁺ 过高。
+      </p>
+    </div>
+
+    <button class="btn-run" id="run">开始分析</button>
+    <div class="error" id="error"></div>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ==================== 1. 指标定义 ==================== */
+  const DEFS = {
+    "血液酸碱度":       { key: "pH",    unit: "",       ref: [7.35, 7.45],  label: "pH" },
+    "二氧化碳分压":     { key: "pCO2",  unit: "mmHg",   ref: [35, 45],      label: "PaCO₂" },
+    "氧分压":           { key: "pO2",   unit: "mmHg",   ref: [80, 100],     label: "PaO₂" },
+    "实际碳酸氢盐":     { key: "HCO3",  unit: "mmol/L", ref: [22, 27],      label: "HCO₃⁻ (实际)" },
+    "标准碳酸氢盐":     { key: "SBC",   unit: "mmol/L", ref: [22, 27],      label: "标准HCO₃⁻" },
+    "二氧化碳总量":     { key: "TCO2",  unit: "mmol/L", ref: [23, 29],      label: "TCO₂" },
+    "血液剩余碱":       { key: "BE",    unit: "mmol/L", ref: [-3, 3],       label: "BE" },
+    "细胞外液剩余碱":   { key: "BEecf", unit: "mmol/L", ref: [-3, 3],       label: "BEecf" },
+    "氧饱和度":         { key: "SaO2",  unit: "%",      ref: [95, 100],     label: "SaO₂" },
+    "钠离子":           { key: "Na",    unit: "mmol/L", ref: [135, 145],    label: "Na⁺" },
+    "钾离子":           { key: "K",     unit: "mmol/L", ref: [3.5, 5.0],    label: "K⁺" },
+    "氯离子":           { key: "Cl",    unit: "mmol/L", ref: [95, 106],     label: "Cl⁻" },
+    "Ca2+":             { key: "iCa",   unit: "mmol/L", ref: [1.15, 1.30],  label: "离子钙 (iCa²⁺)" },
+    "乳酸":             { key: "Lac",   unit: "mmol/L", ref: [0.5, 2.0],    label: "乳酸" },
+    "葡萄糖":           { key: "Glu",   unit: "mmol/L", ref: [3.9, 6.1],    label: "葡萄糖" },
+    "血红蛋白测定":     { key: "Hb",    unit: "g/L",    ref: [115, 175],    label: "血红蛋白" },
+    "阴离子间隙(血气)": { key: "AG",    unit: "mmol/L", ref: [8, 16],       label: "阴离子间隙 (AG)" },
+    "胆红素":           { key: "Bili",  unit: "μmol/L", ref: [2, 17],       label: "胆红素" },
+  };
+
+  /* 常见别名映射（英文缩写、写法变体） */
+  const ALIASES = {
+    "ph": "血液酸碱度",
+    "pco2": "二氧化碳分压", "paco2": "二氧化碳分压",
+    "po2": "氧分压", "pao2": "氧分压",
+    "hco3": "实际碳酸氢盐", "hco3-": "实际碳酸氢盐",
+    "na": "钠离子", "na+": "钠离子",
+    "k": "钾离子", "k+": "钾离子",
+    "cl": "氯离子", "cl-": "氯离子",
+    "ca": "Ca2+", "ca++": "Ca2+", "钙离子": "Ca2+", "离子钙": "Ca2+",
+    "lac": "乳酸",
+    "glu": "葡萄糖",
+    "hb": "血红蛋白测定",
+    "ag": "阴离子间隙(血气)",
+  };
+
+  const ACID_BASE = {
+    phNormal: [7.35, 7.45],
+    hco3Normal: 24,
+    pco2Normal: 40,
+    winter: (hco3) => ({ expected: 1.5 * hco3 + 8, range: 2 }),
+    // 代谢性碱中毒预计 PaCO₂：0.7 × ΔHCO₃⁻ + 40 ± 5（部分教材写作 0.7 × ΔHCO₃⁻ + 42 ± 2）
+    metAlk: (hco3) => ({ expected: 0.7 * (hco3 - 24) + 40, range: 5 }),
+    acuteRespAcid: (pco2) => 24 + 1 * ((pco2 - 40) / 10),
+    chronicRespAcid: (pco2) => 24 + 3.5 * ((pco2 - 40) / 10),
+    acuteRespAlk: (pco2) => 24 - 2 * ((40 - pco2) / 10),
+    chronicRespAlk: (pco2) => 24 - 4.5 * ((40 - pco2) / 10),
+    agRef: [8, 16],
+  };
+
+  /* CRRT 药物换算常量 */
+  const CRRT_CONST = {
+    NAHCO3_5PCT_MMOL_PER_ML: 12.5 / 84.007 * 1000 / 250,
+    KCL_MMOL_PER_G: 1000 / 74.551,
+    NACL_MMOL_PER_G: 1000 / 58.44,
+    CA_GLUCONATE_MMOL_PER_G: 2.23,
+    CACL2_2H2O_MMOL_PER_G: 6.80,
+  };
+
+  /* 常见置换液配方预设 */
+  const PRESETS = {
+    custom_low_na: { na: 113, cl: 118, k: 0, ca: 0 },
+    prismasol4: { na: 140, cl: 109.5, k: 4, ca: 1.75 },
+    prismasol_b0: { na: 140, cl: 109.5, k: 0, ca: 0 },
+  };
+
+  /* ==================== 2. 解析器 ==================== */
+  function resolveDef(rawName) {
+    if (DEFS[rawName]) return DEFS[rawName];
+    const normalized = rawName.replace(/\s/g, "");
+    for (const k of Object.keys(DEFS)) {
+      if (k.replace(/\s/g, "") === normalized) return DEFS[k];
+    }
+    const lower = normalized.toLowerCase();
+    if (ALIASES[lower]) return DEFS[ALIASES[lower]];
+    return null;
+  }
+
+  function parseBloodGas(text) {
+    const map = {};
+    if (!text) return map;
+    // 兼容全角冒号、全角逗号、换行
+    const normalized = text.replace(/：/g, ":").replace(/，/g, ",");
+    const segments = normalized.split(/[,\n\r]/);
+    for (let seg of segments) {
+      seg = seg.trim();
+      if (!seg) continue;
+      seg = seg.replace(/[↓↑⬇⬆↘↗]/g, "").trim();
+      const parts = seg.split(":").map(s => s.trim());
+      if (parts.length < 2) continue;
+      const rawName = parts[0], rawVal = parts[1], unit = parts[parts.length - 1];
+      const numMatch = rawVal.match(/-?\d+(\.\d+)?/);
+      if (!numMatch) continue;
+      const value = parseFloat(numMatch[0]);
+      const def = resolveDef(rawName);
+      if (!def) continue;
+      map[def.key] = { value, unit: unit || def.unit, label: def.label, def };
+    }
+    return map;
+  }
+
+  /* ==================== 3. 基础辅助 ==================== */
+  function status(v, ref) { if (v == null || isNaN(v)) return "unknown"; if (v < ref[0]) return "low"; if (v > ref[1]) return "high"; return "normal"; }
+  function fmt(v, d = 2) { if (v == null || isNaN(v)) return "—"; return Number(v).toFixed(d).replace(/\.?0+$/, ""); }
+  function isNum(v) { return v != null && !isNaN(v) && isFinite(v); }
+  function statusBadge(s) { return s === "low" ? '<span class="badge blue">偏低</span>' : s === "high" ? '<span class="badge red">偏高</span>' : s === "normal" ? '<span class="badge green">正常</span>' : ""; }
+
+  /* ==================== 4. 血气分析核心 ==================== */
+  function analyze(data, fio2Percent, albumin) {
+    const get = (k) => data[k] ? data[k].value : null;
+    const results = { abnormal: [], electrolyte: [], acidBase: null, oxygenation: null, ag: null, lactate: null };
+
+    const order = ["pH","pCO2","pO2","HCO3","SBC","BE","BEecf","SaO2","Na","K","Cl","iCa","Lac","Glu","Hb","AG","Bili"];
+    for (const k of order) {
+      if (!data[k]) continue;
+      results.abnormal.push({ key: k, label: data[k].label, value: data[k].value, unit: data[k].unit, ref: data[k].def.ref, status: status(data[k].value, data[k].def.ref) });
+    }
+
+    const na = get("Na"), k = get("K"), cl = get("Cl"), ica = get("iCa");
+    if (isNum(na)) {
+      if (na < 135) { let s = na >= 130 ? "轻度" : na >= 125 ? "中度" : "重度"; results.electrolyte.push({ text: `${s}低钠血症（Na⁺ ${fmt(na,1)} mmol/L）`, level: na < 125 ? "danger" : "warn" }); }
+      else if (na > 145) results.electrolyte.push({ text: `高钠血症（Na⁺ ${fmt(na,1)} mmol/L）`, level: "warn" });
+    }
+    if (isNum(k)) {
+      if (k < 3.5) { let s = k >= 3.0 ? "轻度" : k >= 2.5 ? "中度" : "重度"; results.electrolyte.push({ text: `${s}低钾血症（K⁺ ${fmt(k,1)} mmol/L）`, level: k < 2.5 ? "danger" : "warn" }); }
+      else if (k > 5.0) results.electrolyte.push({ text: `高钾血症（K⁺ ${fmt(k,1)} mmol/L）`, level: k > 6.0 ? "danger" : "warn" });
+    }
+    if (isNum(ica)) {
+      if (ica < 1.15) results.electrolyte.push({ text: `低钙血症（iCa²⁺ ${fmt(ica,2)} mmol/L）`, level: "warn" });
+      else if (ica > 1.30) results.electrolyte.push({ text: `高钙血症（iCa²⁺ ${fmt(ica,2)} mmol/L）`, level: "warn" });
+    }
+    if (isNum(cl)) {
+      if (cl < 95) results.electrolyte.push({ text: `低氯血症（Cl⁻ ${fmt(cl,1)} mmol/L）`, level: "warn" });
+      else if (cl > 106) results.electrolyte.push({ text: `高氯血症（Cl⁻ ${fmt(cl,1)} mmol/L）`, level: "warn" });
+    }
+
+    const lac = get("Lac");
+    if (isNum(lac)) {
+      if (lac >= 4.0) results.lactate = { text: `乳酸显著升高（${fmt(lac,1)} mmol/L），需警惕乳酸性酸中毒`, level: "danger" };
+      else if (lac >= 2.0) results.lactate = { text: `高乳酸血症（${fmt(lac,1)} mmol/L）`, level: "warn" };
+      else results.lactate = { text: `乳酸正常（${fmt(lac,1)} mmol/L）`, level: "ok" };
+    }
+
+    /* AG 与白蛋白校正 */
+    const agObs = get("AG"), hco3 = get("HCO3");
+    let agVal = agObs;
+    if (!isNum(agVal) && isNum(na) && isNum(cl) && isNum(hco3)) agVal = na - cl - hco3;
+    if (isNum(agVal)) {
+      let corrected = null, note = "";
+      if (isNum(albumin)) {
+        corrected = agVal + 0.25 * (40 - albumin);
+        note = `按白蛋白 ${fmt(albumin,1)} g/L 校正：AG校正 = ${fmt(agVal,1)} + 0.25 × (40 − ${fmt(albumin,1)}) = ${fmt(corrected,1)} mmol/L`;
+      } else {
+        note = "未提供白蛋白，AG 未校正（低白蛋白时实际 AG 可能被低估）";
+      }
+      results.ag = { observed: agVal, status: status(agVal, ACID_BASE.agRef), corrected, note };
+    }
+
+    const pH = get("pH"), pco2 = get("pCO2"), hco3v = get("HCO3");
+    const ab = { primary: [], compensation: [], mixed: [], summary: "", severity: "normal", agContribution: null };
+    if (isNum(pH) && isNum(pco2) && isNum(hco3v)) {
+      const phStatus = pH < 7.35 ? "acidemia" : pH > 7.45 ? "alkalemia" : "normal";
+      ab.severity = phStatus;
+      let primaryType = null;
+
+      if (phStatus === "acidemia") {
+        if (pco2 > 45 && hco3v < 22) { ab.primary.push("呼吸性酸中毒 + 代谢性酸中毒（混合性）"); primaryType = "mixed_acidosis"; }
+        else if (pco2 > 45) { ab.primary.push("呼吸性酸中毒"); primaryType = "resp_acidosis"; }
+        else if (hco3v < 22) { ab.primary.push("代谢性酸中毒"); primaryType = "met_acidosis"; }
+        else ab.primary.push("酸血症，原发因素不明确");
+      } else if (phStatus === "alkalemia") {
+        if (pco2 < 35 && hco3v > 27) { ab.primary.push("呼吸性碱中毒 + 代谢性碱中毒（混合性）"); primaryType = "mixed_alkalosis"; }
+        else if (pco2 < 35) { ab.primary.push("呼吸性碱中毒"); primaryType = "resp_alkalosis"; }
+        else if (hco3v > 27) { ab.primary.push("代谢性碱中毒"); primaryType = "met_alkalosis"; }
+        else ab.primary.push("碱血症，原发因素不明确");
+      } else {
+        if (pco2 < 35 && hco3v < 22) { ab.primary.push("pH 正常，PaCO₂ 与 HCO₃⁻ 同向降低，符合代偿性代谢性酸中毒（Winter 公式确认）"); primaryType = "comp_met_acidosis"; }
+        else if (pco2 > 45 && hco3v > 27) { ab.primary.push("pH 正常，PaCO₂ 与 HCO₃⁻ 同向升高，符合代偿性呼吸性酸中毒或代谢性碱中毒（需结合公式判断）"); primaryType = "comp_resp_acidosis"; }
+        else if (pco2 < 35) { ab.primary.push("pH 正常，PaCO₂ 降低，提示呼吸性碱中毒（可能代偿）"); primaryType = "resp_alkalosis_comp"; }
+        else if (hco3v < 22) { ab.primary.push("pH 正常，HCO₃⁻ 降低，提示代谢性酸中毒（可能代偿，Winter 公式确认）"); primaryType = "met_acidosis_comp"; }
+        else if (pco2 > 45) { ab.primary.push("pH 正常，PaCO₂ 升高，提示呼吸性酸中毒（可能代偿）"); primaryType = "resp_acidosis_comp"; }
+        else if (hco3v > 27) { ab.primary.push("pH 正常，HCO₃⁻ 升高，提示代谢性碱中毒（可能代偿）"); primaryType = "met_alkalosis_comp"; }
+        else ab.primary.push("酸碱指标基本正常");
+      }
+
+      if (primaryType === "met_acidosis" || primaryType === "comp_met_acidosis") {
+        const w = ACID_BASE.winter(hco3v);
+        ab.compensation.push({ label: "Winter 公式（代酸预计 PaCO₂）", expected: w.expected, range: w.range, actual: pco2, unit: "mmHg" });
+        if (pco2 > w.expected + w.range) ab.mixed.push(`PaCO₂ 高于预计上限，合并呼吸性酸中毒`);
+        else if (pco2 < w.expected - w.range) ab.mixed.push(`PaCO₂ 低于预计下限，合并呼吸性碱中毒`);
+        else ab.compensation.push({ label: "代偿评估", text: "PaCO₂ 在预计代偿范围内，符合单纯代谢性酸中毒" });
+      }
+      if (primaryType === "met_alkalosis" || primaryType === "met_alkalosis_comp") {
+        const m = ACID_BASE.metAlk(hco3v);
+        ab.compensation.push({ label: "代谢性碱中毒预计 PaCO₂", expected: m.expected, range: m.range, actual: pco2, unit: "mmHg" });
+        if (pco2 > m.expected + m.range) ab.mixed.push("PaCO₂ 高于预计上限，合并呼吸性酸中毒");
+        else if (pco2 < m.expected - m.range) ab.mixed.push("PaCO₂ 低于预计下限，合并呼吸性碱中毒");
+        else ab.compensation.push({ label: "代偿评估", text: "PaCO₂ 在预计代偿范围内，符合单纯代谢性碱中毒" });
+      }
+      if (primaryType === "resp_acidosis" || primaryType === "comp_resp_acidosis") {
+        const a = ACID_BASE.acuteRespAcid(pco2), c = ACID_BASE.chronicRespAcid(pco2);
+        ab.compensation.push({ label: "急性呼酸预计 HCO₃⁻", expected: a, actual: hco3v, unit: "mmol/L" });
+        ab.compensation.push({ label: "慢性呼酸预计 HCO₃⁻", expected: c, actual: hco3v, unit: "mmol/L" });
+        const aLo = a - 2, aHi = a + 2, cLo = c - 2, cHi = c + 2;
+        if (hco3v >= aLo && hco3v <= aHi && hco3v < cLo) {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 符合急性呼酸代偿范围" });
+        } else if (hco3v >= cLo && hco3v <= cHi) {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 符合慢性呼酸代偿范围" });
+        } else if (hco3v > aHi && hco3v < cLo) {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 介于急性与慢性呼酸代偿之间，可能处于过渡期，需结合病史判断" });
+        } else if (hco3v < aLo) {
+          ab.mixed.push("HCO₃⁻ 低于急性/慢性呼酸预计范围，合并代谢性酸中毒");
+        } else if (hco3v > cHi) {
+          ab.mixed.push("HCO₃⁻ 高于急性/慢性呼酸预计范围，合并代谢性碱中毒");
+        } else {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 超出急性/慢性呼酸代偿范围，需结合临床判断" });
+        }
+      }
+      if (primaryType === "resp_alkalosis" || primaryType === "resp_alkalosis_comp") {
+        const a = ACID_BASE.acuteRespAlk(pco2), c = ACID_BASE.chronicRespAlk(pco2);
+        ab.compensation.push({ label: "急性呼碱预计 HCO₃⁻", expected: a, actual: hco3v, unit: "mmol/L" });
+        ab.compensation.push({ label: "慢性呼碱预计 HCO₃⁻", expected: c, actual: hco3v, unit: "mmol/L" });
+        const aLo = a - 2, aHi = a + 2, cLo = c - 2, cHi = c + 2;
+        if (hco3v >= aLo && hco3v <= aHi && hco3v > cHi) {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 符合急性呼碱代偿范围" });
+        } else if (hco3v >= cLo && hco3v <= cHi) {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 符合慢性呼碱代偿范围" });
+        } else if (hco3v < cLo && hco3v > aHi) {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 介于急性与慢性呼碱代偿之间，可能处于过渡期，需结合病史判断" });
+        } else if (hco3v < cLo) {
+          ab.mixed.push("HCO₃⁻ 低于急性/慢性呼碱预计范围，合并代谢性酸中毒");
+        } else if (hco3v > aHi) {
+          ab.mixed.push("HCO₃⁻ 高于急性/慢性呼碱预计范围，合并代谢性碱中毒");
+        } else {
+          ab.compensation.push({ label: "代偿评估", text: "HCO₃⁻ 超出急性/慢性呼碱代偿范围，需结合临床判断" });
+        }
+      }
+      if (results.ag && results.ag.observed > 16 && hco3v < 22) ab.agContribution = `AG 升高（${fmt(results.ag.observed,1)} mmol/L）伴 HCO₃⁻ 降低，提示高 AG 代谢性酸中毒`;
+      const parts = [];
+      if (ab.primary.length) parts.push(ab.primary.join("；"));
+      if (ab.mixed.length) parts.push("混合失衡：" + ab.mixed.join("；"));
+      if (ab.agContribution) parts.push(ab.agContribution);
+      ab.summary = parts.join("。") || "未发现明确酸碱失衡";
+    }
+    results.acidBase = ab;
+
+    const pO2 = get("pO2"), fio2Frac = fio2Percent / 100;
+    if (isNum(pO2)) {
+      const pf = pO2 / fio2Frac;
+      const oxy = { pO2, fio2: fio2Percent, pf, label: "", level: "normal", note: "" };
+      if (pf >= 400) { oxy.label = "氧合指数正常"; oxy.level = "ok"; }
+      else if (pf >= 300) { oxy.label = "氧合指数轻度降低"; oxy.level = "warn"; }
+      else if (pf >= 200) { oxy.label = "轻度 ARDS 范围（200–300）"; oxy.level = "warn"; oxy.note = "需结合 PEEP/CPAP ≥ 5 cmH₂O 及临床背景判断"; }
+      else if (pf >= 100) { oxy.label = "中度 ARDS 范围（100–200）"; oxy.level = "danger"; oxy.note = "需结合 PEEP/CPAP ≥ 5 cmH₂O 及临床背景判断"; }
+      else { oxy.label = "重度 ARDS 范围（<100）"; oxy.level = "danger"; oxy.note = "需结合 PEEP/CPAP ≥ 5 cmH₂O 及临床背景判断"; }
+      if (pO2 < 60) { const type = pco2 != null && pco2 > 50 ? "Ⅱ 型呼吸衰竭" : "Ⅰ 型呼吸衰竭"; oxy.note = (oxy.note ? oxy.note + "；" : "") + `PaO₂ < 60 mmHg，符合${type}氧合标准`; }
+      results.oxygenation = oxy;
+    }
+    return results;
+  }
+
+  /* ==================== 5. CRRT 当前置换液浓度计算 ==================== */
+  function calcCurrentRF(crrt) {
+    const V_ml = crrt.totalVolume || 0;
+    const V_L = V_ml / 1000;
+    if (V_L <= 0) return null;
+
+    const V_NaHCO3_L = (crrt.naHCO3_ml || 0) / 1000;
+    const V_base_L = Math.max(0, V_L - V_NaHCO3_L);
+
+    const nahco3_mmol = (crrt.naHCO3_ml || 0) * CRRT_CONST.NAHCO3_5PCT_MMOL_PER_ML;
+    const kcl_mmol = (crrt.kcl_g || 0) * CRRT_CONST.KCL_MMOL_PER_G;
+    const nacl_mmol = (crrt.nacl_g || 0) * CRRT_CONST.NACL_MMOL_PER_G;
+    const caCoeff = crrt.caType === "gluconate" ? CRRT_CONST.CA_GLUCONATE_MMOL_PER_G
+                   : crrt.caType === "cacl2" ? CRRT_CONST.CACL2_2H2O_MMOL_PER_G : 0;
+    const ca_mmol = (crrt.ca_g || 0) * caCoeff;
+
+    const totalNa = crrt.baseNa * V_base_L + nahco3_mmol + nacl_mmol;
+    const totalK = crrt.baseK * V_base_L + kcl_mmol;
+    const totalCa = crrt.baseCa * V_base_L + ca_mmol;
+    const totalCl = crrt.baseCl * V_base_L + kcl_mmol + nacl_mmol
+                  + (crrt.caType === "cacl2" ? ca_mmol * 2 : 0);
+
+    return {
+      V_L, V_base_L,
+      hco3: nahco3_mmol / V_L,
+      na: totalNa / V_L,
+      k: totalK / V_L,
+      ca: totalCa / V_L,
+      cl: totalCl / V_L,
+      nahco3_mmol, kcl_mmol, nacl_mmol, ca_mmol,
+    };
+  }
+
+  /* ==================== 6. 目标值建议 ==================== */
+  function suggestTargets(data, crrt, current) {
+    const get = (k) => data[k] ? data[k].value : null;
+    const hco3 = get("HCO3"), BE = get("BE"), K = get("K"), Na = get("Na"), iCa = get("iCa");
+    const V_L = current.V_L;
+
+    /* 碱基目标 */
+    let targetHCO3, hco3Reason;
+    if (hco3 != null && (hco3 < 22 || (BE != null && BE < -3))) { targetHCO3 = 30; hco3Reason = `代酸方向，目标置换液 HCO₃⁻ 约 28–32`; }
+    else if (hco3 != null && (hco3 > 27 || (BE != null && BE > 3))) { targetHCO3 = 22; hco3Reason = `代碱方向，目标置换液 HCO₃⁻ 约 20–25`; }
+    else { targetHCO3 = 26; hco3Reason = `酸碱基本正常，目标置换液 HCO₃⁻ 约 25–28`; }
+    const suggestedNaHCO3_ml = Math.max(0, targetHCO3 * V_L / CRRT_CONST.NAHCO3_5PCT_MMOL_PER_ML);
+
+    /* 钾目标 */
+    let targetK, kReason;
+    if (K == null) { targetK = 4; kReason = "血钾未填，按常规 4 mmol/L"; }
+    else if (K < 3.0) { targetK = 6; kReason = `血 K⁺ ${fmt(K,2)} < 3.0，置换液 K⁺ 可 5–6 mmol/L`; }
+    else if (K < 3.5) { targetK = 5; kReason = `血 K⁺ ${fmt(K,2)} 3.0–3.4，置换液 K⁺ 可 5 mmol/L`; }
+    else if (K <= 5.3) { targetK = 4; kReason = `血 K⁺ ${fmt(K,2)} 正常范围，置换液 K⁺ 4 mmol/L`; }
+    else if (K <= 5.9) { targetK = 3; kReason = `血 K⁺ ${fmt(K,2)} 5.4–5.9，置换液 K⁺ 3 mmol/L`; }
+    else { targetK = 0; kReason = `血 K⁺ ${fmt(K,2)} ≥ 6.0，建议使用零钾置换液并积极降钾`; }
+    const suggestedKCl_g = targetK * V_L / CRRT_CONST.KCL_MMOL_PER_G;
+
+    /* 钠目标：严重低钠/高钠时控制与血钠的差值 */
+    let targetNa_plasma, naReason;
+    if (Na == null) { targetNa_plasma = 140; naReason = "血钠未填，按 140 mmol/L"; }
+    else if (Na < 125) { targetNa_plasma = 140; naReason = `血 Na⁺ ${fmt(Na,1)} 明显降低，置换液 Na⁺ 目标 140 mmol/L（纠正速度 ≤ 8–10 mmol/L/24h）`; }
+    else if (Na < 135) { targetNa_plasma = 145; naReason = `血 Na⁺ ${fmt(Na,1)} 偏低，置换液 Na⁺ 可 145 mmol/L 左右`; }
+    else if (Na > 155) { targetNa_plasma = 140; naReason = `血 Na⁺ ${fmt(Na,1)} 显著升高，置换液 Na⁺ 目标 140 mmol/L（纠正速度 ≤ 8–10 mmol/L/24h）`; }
+    else if (Na > 145) { targetNa_plasma = 135; naReason = `血 Na⁺ ${fmt(Na,1)} 偏高，置换液 Na⁺ 可 135 mmol/L 左右`; }
+    else { targetNa_plasma = 140; naReason = `血 Na⁺ 正常，置换液 Na⁺ 目标 140 mmol/L`; }
+
+    const targetTotalNa = targetNa_plasma * V_L;
+    const baseNaContrib = crrt.baseNa * current.V_base_L;
+    const neededNaCl_mmol = targetTotalNa - baseNaContrib - current.nahco3_mmol;
+    const suggestedNaCl_g = neededNaCl_mmol / CRRT_CONST.NACL_MMOL_PER_G;
+
+    /* 钙目标（非 RCA） */
+    const isRCA = crrt.anticoag === "rca";
+    let targetCa, caReason, canCalcCa = crrt.caType !== "none";
+    if (isRCA) { targetCa = 0; caReason = "RCA 使用无钙置换液，钙剂经静脉单独补充"; }
+    else if (iCa != null && iCa < 1.15) { targetCa = 1.75; caReason = `血 iCa²⁺ ${fmt(iCa,2)} 偏低，置换液 Ca²⁺ 可 1.5–1.75 mmol/L`; }
+    else if (iCa != null && iCa > 1.30) { targetCa = 1.0; caReason = `血 iCa²⁺ ${fmt(iCa,2)} 偏高，置换液 Ca²⁺ 可 1.0 mmol/L 左右`; }
+    else { targetCa = 1.5; caReason = `iCa²⁺ 正常，置换液 Ca²⁺ 可 1.25–1.5 mmol/L`; }
+    const caCoeff = crrt.caType === "gluconate" ? CRRT_CONST.CA_GLUCONATE_MMOL_PER_G
+                   : crrt.caType === "cacl2" ? CRRT_CONST.CACL2_2H2O_MMOL_PER_G : 1;
+    const suggestedCa_g = canCalcCa ? Math.max(0, (targetCa - crrt.baseCa) * V_L / caCoeff) : null;
+
+    return {
+      targetHCO3, hco3Reason, suggestedNaHCO3_ml,
+      targetK, kReason, suggestedKCl_g,
+      targetNa_plasma, naReason, suggestedNaCl_g,
+      targetCa, caReason, suggestedCa_g, canCalcCa,
+    };
+  }
+
+  /* ==================== 7. CRRT 调整逻辑 ==================== */
+  function isHco3Abnormal(hco3, BE) {
+    return isNum(hco3) && (hco3 < 22 || hco3 > 27 || (isNum(BE) && (BE < -3 || BE > 3)));
+  }
+
+  function analyzeCRRT(data, crrt) {
+    const current = calcCurrentRF(crrt);
+    if (!current) return { rows: [], alerts: [{ level: "warn", text: "未填写置换液总量，无法计算当前置换液离子浓度。" }], current: null };
+    const targets = suggestTargets(data, crrt, current);
+    const rows = [];
+    const alerts = [];
+    const get = (k) => data[k] ? data[k].value : null;
+
+    /* ---- 碳酸氢钠 ---- */
+    const hco3Val = get("HCO3"), BEVal = get("BE");
+    const hco3Abn = isHco3Abnormal(hco3Val, BEVal);
+    const dNaHCO3 = targets.suggestedNaHCO3_ml - (crrt.naHCO3_ml || 0);
+    let action, advice;
+    if (Math.abs(dNaHCO3) < 20) {
+      action = "keep";
+      advice = `维持当前 5% NaHCO₃ ${fmt(crrt.naHCO3_ml,0)} ml（置换液 HCO₃⁻ 约 ${fmt(current.hco3,1)} mmol/L，Na⁺ 约 ${fmt(current.na,1)} mmol/L）`;
+    } else if (dNaHCO3 > 0) {
+      action = "up";
+      advice = `建议增加 5% NaHCO₃ 约 ${fmt(dNaHCO3,0)} ml（从 ${fmt(crrt.naHCO3_ml,0)} ml 增至约 ${fmt(targets.suggestedNaHCO3_ml,0)} ml，置换液 HCO₃⁻ 约 ${fmt(targets.targetHCO3,0)} mmol/L）`;
+    } else {
+      action = "down";
+      advice = `建议减少 5% NaHCO₃ 约 ${fmt(Math.abs(dNaHCO3),0)} ml（从 ${fmt(crrt.naHCO3_ml,0)} ml 降至约 ${fmt(targets.suggestedNaHCO3_ml,0)} ml）`;
+    }
+    rows.push({
+      ion: "碳酸氢钠 (5%)",
+      current: `${fmt(crrt.naHCO3_ml,0)} ml → HCO₃⁻ ${fmt(current.hco3,1)} mmol/L`,
+      action, advice,
+      tone: hco3Abn ? "danger" : "info",
+      basis: `${targets.hco3Reason}（血 HCO₃⁻ ${fmt(hco3Val,1)}、BE ${fmt(BEVal,1)}）`
+    });
+    if (crrt.extraNaHCO3 != null && crrt.extraNaHCO3 > 0) {
+      alerts.push({ level: "info", text: `另有额外静脉 NaHCO₃ ${fmt(crrt.extraNaHCO3,1)} mmol/h 正在输注，调整置换液碱基时应将这一项一并计入总碱基供给。` });
+    }
+
+    /* ---- 钾 ---- */
+    const KVal = get("K");
+    const kAbn = isNum(KVal) && (KVal < 3.5 || KVal > 5.0);
+    const dKCl = targets.suggestedKCl_g - (crrt.kcl_g || 0);
+    let kAction, kAdvice, kTone;
+    if (KVal != null && KVal > 6.0) {
+      kAction = "down"; kTone = "danger";
+      kAdvice = `血 K⁺ ${fmt(KVal,1)} 达危急值。建议立即使用零钾置换液（当前 KCl ${fmt(crrt.kcl_g,2)} g，目标 0 g），并积极降钾（钙剂、胰岛素+葡萄糖、利尿等），加密监测血钾。`;
+    } else if (Math.abs(dKCl) < 0.05) {
+      kAction = "keep"; kTone = kAbn ? "danger" : "info";
+      kAdvice = `维持当前 KCl ${fmt(crrt.kcl_g,2)} g（置换液 K⁺ 约 ${fmt(current.k,2)} mmol/L）`;
+    } else if (dKCl > 0) {
+      kAction = "up"; kTone = kAbn ? "danger" : "info";
+      kAdvice = `建议增加 KCl 约 ${fmt(dKCl,2)} g（从 ${fmt(crrt.kcl_g,2)} g 增至约 ${fmt(targets.suggestedKCl_g,2)} g，目标置换液 K⁺ 约 ${fmt(targets.targetK,1)} mmol/L）`;
+    } else {
+      kAction = "down"; kTone = kAbn ? "danger" : "info";
+      kAdvice = `建议减少 KCl 约 ${fmt(Math.abs(dKCl),2)} g（从 ${fmt(crrt.kcl_g,2)} g 降至约 ${fmt(targets.suggestedKCl_g,2)} g）`;
+    }
+    rows.push({
+      ion: "氯化钾 (KCl)",
+      current: `${fmt(crrt.kcl_g,2)} g → K⁺ ${fmt(current.k,2)} mmol/L`,
+      action: kAction, advice: kAdvice, tone: kTone, basis: targets.kReason
+    });
+    if (KVal != null && KVal > 6.0) alerts.push({ level: "danger", text: `血 K⁺ ${fmt(KVal,1)} mmol/L 达高钾危急值，应尽快使用零钾置换液并积极降钾，加密监测。` });
+    if (crrt.extraK != null && crrt.extraK > 0) {
+      alerts.push({ level: "info", text: `另有额外静脉补钾 ${fmt(crrt.extraK,1)} mmol/h，调整置换液钾时应将静脉补钾一并计入，避免过度补钾。` });
+    }
+
+    /* ---- 钠 ---- */
+    const NaVal = get("Na");
+    const naAbn = isNum(NaVal) && (NaVal < 135 || NaVal > 145);
+    let naAction, naAdvice;
+    if (targets.suggestedNaCl_g > 0) {
+      const dNaCl = targets.suggestedNaCl_g - (crrt.nacl_g || 0);
+      if (dNaCl > 0.1) {
+        naAction = "up";
+        naAdvice = `建议增加 NaCl 约 ${fmt(dNaCl,2)} g（从 ${fmt(crrt.nacl_g,2)} g 增至约 ${fmt(targets.suggestedNaCl_g,2)} g，使最终置换液 Na⁺ 约 ${fmt(targets.targetNa_plasma,0)} mmol/L）`;
+      } else if (dNaCl < -0.1) {
+        naAction = "down";
+        naAdvice = `建议减少 NaCl 约 ${fmt(Math.abs(dNaCl),2)} g（从 ${fmt(crrt.nacl_g,2)} g 降至约 ${fmt(targets.suggestedNaCl_g,2)} g）`;
+      } else {
+        naAction = "keep";
+        naAdvice = `维持当前 NaCl ${fmt(crrt.nacl_g,2)} g（最终置换液 Na⁺ 约 ${fmt(current.na,1)} mmol/L）`;
+      }
+    } else {
+      naAction = "caution";
+      naAdvice = `按当前基础液 Na⁺ ${fmt(crrt.baseNa,0)} mmol/L 和 NaHCO₃ 用量，最终置换液 Na⁺ 已达 ${fmt(current.na,1)} mmol/L，高于目标 ${fmt(targets.targetNa_plasma,0)} mmol/L。NaCl 已无法再减，建议降低基础液 Na⁺（如改用 100–120 mmol/L 低钠基础液）或减少 NaHCO₃ 用量。`;
+    }
+    if (NaVal != null && NaVal < 125) {
+      naAdvice += ` 血 Na⁺ 明显降低，纠正速度应控制在每 24h 血钠上升 ≤ 8–10 mmol/L；必要时先使用与血钠接近的置换液，再逐步上调。`;
+    }
+    if (NaVal != null && NaVal > 155) {
+      naAdvice += ` 血 Na⁺ 显著升高，置换液 Na 与血钠差值宜逐步缩小，每 24h 血钠下降 ≤ 8–10 mmol/L。`;
+    }
+    rows.push({
+      ion: "氯化钠 (NaCl)",
+      current: `${fmt(crrt.nacl_g,2)} g → 最终 Na⁺ ${fmt(current.na,1)} mmol/L`,
+      action: naAction, advice: naAdvice,
+      tone: naAbn ? "danger" : "info",
+      basis: targets.naReason
+    });
+    if (NaVal != null && NaVal > 155) alerts.push({ level: "danger", text: `血 Na⁺ ${fmt(NaVal,1)} mmol/L 显著升高。高钠时 CRRT 钠调整需谨慎，建议按目标下降速度逐步调整，24 h 内血钠下降一般不超过 8–10 mmol/L。` });
+    if (NaVal != null && NaVal < 125) alerts.push({ level: "danger", text: `血 Na⁺ ${fmt(NaVal,1)} mmol/L 明显降低。纠正低钠不宜过快，24 h 内血钠上升一般不超过 8–10 mmol/L，以免渗透性脱髓鞘。` });
+
+    /* ---- 钙（RCA 与非 RCA 分别处理） ---- */
+    const iCaVal = get("iCa");
+    if (crrt.anticoag === "rca") {
+      /* RCA：置换液不加钙，确认基础液为无钙配方 */
+      rows.push({
+        ion: "置换液钙 (Ca²⁺)",
+        current: `基础液 Ca²⁺ ${fmt(crrt.baseCa,2)} mmol/L`,
+        action: crrt.baseCa > 0.1 ? "caution" : "keep",
+        advice: crrt.baseCa > 0.1
+          ? `RCA 使用无钙置换液，当前基础液 Ca²⁺ ${fmt(crrt.baseCa,2)} mmol/L，请确认并改用无钙配方；钙剂经静脉单独补充。`
+          : `RCA 使用无钙置换液，基础液 Ca²⁺ 0 mmol/L，符合要求。`,
+        tone: crrt.baseCa > 0.1 ? "danger" : "info",
+        basis: "RCA 抗凝原则"
+      });
+
+      /* RCA：静脉补钙速度调整 */
+      const caRate = crrt.caRate;
+      if (isNum(iCaVal) && isNum(caRate)) {
+        let caAction, caAdvice, caTone;
+        if (iCaVal < 0.85) {
+          caAction = "up"; caTone = "danger";
+          caAdvice = `体内 iCa²⁺ ${fmt(iCaVal,2)} 明显低于目标（0.9–1.1）。建议静脉补钙增加约 1.0–1.5 mmol/h 元素钙（当前 ${fmt(caRate,1)} mmol/h），并排除枸橼酸蓄积（查总钙/iCa 比值）。`;
+        } else if (iCaVal < 0.9) {
+          caAction = "up"; caTone = "danger";
+          caAdvice = `体内 iCa²⁺ 低于目标。建议静脉补钙增加约 0.5 mmol/h（当前 ${fmt(caRate,1)} mmol/h），并复测 iCa。`;
+        } else if (iCaVal > 1.15) {
+          caAction = "down"; caTone = "danger";
+          caAdvice = `体内 iCa²⁺ 高于目标。建议静脉补钙减少约 0.5 mmol/h（当前 ${fmt(caRate,1)} mmol/h），警惕高钙。`;
+        } else if (iCaVal > 1.1) {
+          caAction = "down"; caTone = "info";
+          caAdvice = `体内 iCa²⁺ 略高于目标。可适当减少静脉补钙（当前 ${fmt(caRate,1)} mmol/h）。`;
+        } else {
+          caAction = "keep"; caTone = "info";
+          caAdvice = `体内 iCa²⁺ 在目标范围，维持静脉补钙 ${fmt(caRate,1)} mmol/h。`;
+        }
+        rows.push({
+          ion: "静脉补钙 (RCA)",
+          current: `${fmt(caRate,1)} mmol/h（元素钙）`,
+          action: caAction, advice: caAdvice, tone: caTone,
+          basis: `体内 iCa²⁺ ${fmt(iCaVal,2)} mmol/L（目标 0.9–1.1）`
+        });
+      }
+
+      /* RCA：枸橼酸流速调整（基于滤器后 iCa） */
+      const citRate = crrt.citrate, postICa = crrt.postFilterICa;
+      if (isNum(citRate) && isNum(postICa)) {
+        let citAction, citAdvice, citTone;
+        if (postICa < 0.25) {
+          citAction = "up"; citTone = "danger";
+          citAdvice = `滤器后 iCa²⁺ ${fmt(postICa,2)} 低于 0.25，抗凝不足。建议上调枸橼酸流速约 10–20%（当前 ${fmt(citRate,1)} mmol/h），并复测滤器后 iCa。`;
+        } else if (postICa > 0.35) {
+          citAction = "down"; citTone = "danger";
+          citAdvice = `滤器后 iCa²⁺ ${fmt(postICa,2)} 高于 0.35，抗凝偏强。建议下调枸橼酸流速约 10–20%（当前 ${fmt(citRate,1)} mmol/h），警惕枸橼酸蓄积。`;
+        } else {
+          citAction = "keep"; citTone = "info";
+          citAdvice = `滤器后 iCa²⁺ 在目标范围（0.25–0.35），维持枸橼酸 ${fmt(citRate,1)} mmol/h。`;
+        }
+        rows.push({
+          ion: "枸橼酸 (RCA)",
+          current: `${fmt(citRate,1)} mmol/h`,
+          action: citAction, advice: citAdvice, tone: citTone,
+          basis: `滤器后 iCa²⁺ ${fmt(postICa,2)} mmol/L`
+        });
+      }
+
+      if (iCaVal != null && iCaVal < 0.75) {
+        alerts.push({ level: "danger", text: `RCA 时血 iCa²⁺ ${fmt(iCaVal,2)} mmol/L < 0.75，存在严重低钙/枸橼酸蓄积风险。建议暂停或大幅降低枸橼酸，积极补钙，并急查总钙/iCa 比值。` });
+      }
+      alerts.push({ level: "info", text: "RCA 时枸橼酸代谢生成碳酸氢盐，碱中毒风险高于非 RCA。调整碳酸氢盐时应同时评估枸橼酸流速、滤器后 iCa 和总钙/iCa 比值（>2.25 且上升提示枸橼酸蓄积）。" });
+    } else {
+      /* 非 RCA：置换液钙调整 */
+      let caAbn = isNum(iCaVal) && (iCaVal < 1.15 || iCaVal > 1.30);
+      if (!targets.canCalcCa) {
+        rows.push({
+          ion: "钙 (Ca²⁺)",
+          current: "未选择钙剂类型",
+          action: "caution",
+          advice: "未选择钙剂类型，无法计算钙调整量。非 RCA 可按需选择葡萄糖酸钙或氯化钙加入置换液。",
+          tone: caAbn ? "danger" : "info",
+          basis: targets.caReason
+        });
+      } else {
+        const dCa = targets.suggestedCa_g - (crrt.ca_g || 0);
+        let caAction, caAdvice;
+        if (Math.abs(dCa) < 0.05) {
+          caAction = "keep";
+          caAdvice = `维持当前钙剂 ${fmt(crrt.ca_g,2)} g（置换液 Ca²⁺ 约 ${fmt(current.ca,2)} mmol/L）`;
+        } else if (dCa > 0) {
+          caAction = "up";
+          caAdvice = `建议增加钙剂约 ${fmt(dCa,2)} g（从 ${fmt(crrt.ca_g,2)} g 增至约 ${fmt(targets.suggestedCa_g,2)} g，目标置换液 Ca²⁺ 约 ${fmt(targets.targetCa,2)} mmol/L）`;
+        } else {
+          caAction = "down";
+          caAdvice = `建议减少钙剂约 ${fmt(Math.abs(dCa),2)} g（从 ${fmt(crrt.ca_g,2)} g 降至约 ${fmt(targets.suggestedCa_g,2)} g）`;
+        }
+        rows.push({
+          ion: "钙 (Ca²⁺)",
+          current: `${fmt(crrt.ca_g,2)} g → Ca²⁺ ${fmt(current.ca,2)} mmol/L`,
+          action: caAction, advice: caAdvice,
+          tone: caAbn ? "danger" : "info",
+          basis: targets.caReason
+        });
+      }
+    }
+
+    if (crrt.anticoag === "nafamostat") {
+      alerts.push({ level: "info", text: "甲磺酸萘莫司他为蛋白酶抑制剂类抗凝，对酸碱和电解质无直接影响，置换液调整原则同无抗凝/全身抗凝。仍需监测 ACT/APTT、滤器寿命和出血风险。" });
+    }
+
+    if (crrt.dose != null && crrt.dose >= 25) {
+      alerts.push({ level: "info", text: `CRRT 剂量约 ${fmt(crrt.dose,0)} mL/kg/h，属于较高剂量，磷、镁、钾等溶质丢失增加，即使当前值正常也建议加密监测。` });
+    }
+
+    return { rows, alerts, current, targets };
+  }
+
+  /* ==================== 8. 渲染 ==================== */
+  function render(data, res, crrtResult) {
+    const container = document.getElementById("results");
+    container.style.display = "block";
+
+    let overallBadge = '<span class="badge green">未见明显危急值</span>';
+    const hasDanger = res.electrolyte.some(e => e.level === "danger") || (res.lactate && res.lactate.level === "danger") || (res.oxygenation && res.oxygenation.level === "danger") || (res.acidBase && res.acidBase.mixed.length > 0) || (crrtResult && crrtResult.alerts.some(a => a.level === "danger"));
+    const hasWarn = res.electrolyte.some(e => e.level === "warn") || (res.lactate && res.lactate.level === "warn") || (res.oxygenation && res.oxygenation.level === "warn") || (crrtResult && crrtResult.alerts.some(a => a.level === "warn"));
+    if (hasDanger) overallBadge = '<span class="badge red">存在需要关注的异常</span>';
+    else if (hasWarn) overallBadge = '<span class="badge amber">存在轻度异常</span>';
+
+    let html = `<div class="result-header"><h2 style="font-size:16px;font-weight:650;margin:0;">分析结果</h2>${overallBadge}</div><div class="cards">`;
+
+    if (res.acidBase) {
+      const ab = res.acidBase;
+      let cls = "ok"; if (ab.severity === "acidemia" || ab.severity === "alkalemia") cls = "warn"; if (ab.mixed.length > 0) cls = "danger";
+      html += `<div class="card" style="grid-column:1/-1;"><h3>酸碱失衡分析</h3><ul>`;
+      if (ab.primary.length) html += `<li><span class="label">原发 / 主要诊断</span><span class="val">${ab.primary.join("；")}</span></li>`;
+      for (const c of ab.compensation) {
+        if (c.expected != null) {
+          let line = `${c.label}：预计 ${fmt(c.expected,1)}`; if (c.range) line += ` ± ${c.range}`; line += ` ${c.unit || ""}`;
+          if (c.actual != null) line += `（实测 ${fmt(c.actual,1)}）`;
+          html += `<li><span class="label">代偿计算</span><span class="val">${line}</span></li>`;
+        } else if (c.text) html += `<li><span class="label">代偿评估</span><span class="val">${c.text}</span></li>`;
+      }
+      if (ab.mixed.length) html += `<li><span class="label" style="color:var(--red);">混合失衡提示</span><span class="val" style="color:var(--red);">${ab.mixed.join("；")}</span></li>`;
+      if (ab.agContribution) html += `<li><span class="label">AG 相关</span><span class="val">${ab.agContribution}</span></li>`;
+      html += `</ul><div class="conclusion ${cls}">${ab.summary}</div><p class="note">pH 正常范围 7.35–7.45；PaCO₂ 35–45 mmHg；HCO₃⁻ 22–27 mmol/L。代偿公式用于识别混合性酸碱失衡，不能替代临床综合判断。</p></div>`;
+    }
+
+    if (res.electrolyte.length) {
+      html += `<div class="card"><h3>电解质 / 代谢诊断</h3><ul>`;
+      for (const e of res.electrolyte) html += `<li><span class="label">诊断</span><span class="val" style="color:${e.level === "danger" ? "var(--red)" : "var(--amber)"};">${e.text}</span></li>`;
+      html += `</ul></div>`;
+    }
+
+    if (res.lactate) {
+      const c = res.lactate.level === "danger" ? "var(--red)" : res.lactate.level === "warn" ? "var(--amber)" : "var(--green)";
+      html += `<div class="card"><h3>乳酸</h3><ul><li><span class="label">乳酸</span><span class="val" style="color:${c};">${res.lactate.text}</span></li></ul></div>`;
+    }
+
+    if (res.ag) {
+      html += `<div class="card"><h3>阴离子间隙 (AG)</h3><ul>
+        <li><span class="label">实测 / 计算 AG</span><span class="val">${fmt(res.ag.observed,1)} mmol/L ${statusBadge(res.ag.status)}</span></li>`;
+      if (res.ag.corrected != null) {
+        html += `<li><span class="label">白蛋白校正 AG</span><span class="val">${fmt(res.ag.corrected,1)} mmol/L ${statusBadge(status(res.ag.corrected, ACID_BASE.agRef))}</span></li>`;
+      }
+      html += `</ul><p class="note">${res.ag.note}</p></div>`;
+    }
+
+    if (res.oxygenation) {
+      const ox = res.oxygenation, c = ox.level === "danger" ? "var(--red)" : ox.level === "warn" ? "var(--amber)" : "var(--green)";
+      html += `<div class="card"><h3>氧合分析（P/F 比值）</h3><ul>
+        <li><span class="label">PaO₂</span><span class="val">${fmt(ox.pO2,1)} mmHg</span></li>
+        <li><span class="label">FiO₂</span><span class="val">${fmt(ox.fio2,0)}%</span></li>
+        <li><span class="label">P/F 比值</span><span class="val" style="color:${c};font-size:16px;">${fmt(ox.pf,0)} mmHg</span></li>
+        <li><span class="label">判读</span><span class="val" style="color:${c};">${ox.label}</span></li>
+      </ul>${ox.note ? `<p class="note">${ox.note}</p>` : ""}</div>`;
+    }
+
+    const abn = res.abnormal.filter(a => a.status !== "normal");
+    if (abn.length) {
+      html += `<div class="card" style="grid-column:1/-1;"><h3>异常指标一览</h3><ul>`;
+      for (const a of abn) {
+        const dir = a.status === "high" ? "↑" : "↓", cls = a.status === "high" ? "high" : "low";
+        html += `<li><span class="label">${a.label}</span><span class="val ${cls}">${fmt(a.value)} ${a.unit} ${dir} <span style="font-weight:400;color:var(--muted);font-size:12px;">（参考 ${a.ref[0]}–${a.ref[1]}）</span></span></li>`;
+      }
+      html += `</ul></div>`;
+    }
+
+    /* CRRT 调整卡片 */
+    if (crrtResult && (crrtResult.rows.length || crrtResult.alerts.length)) {
+      html += `<div class="card" style="grid-column:1/-1;border-color:#ddd6fe;">
+        <h3 style="color:var(--purple);">CRRT 参数辅助调整（基于当前血气与处方）</h3>`;
+
+      if (crrtResult.current) {
+        const c = crrtResult.current;
+        html += `<div class="crrt-current-box">
+          <strong>当前置换液估算浓度：</strong>
+          <span class="item">Na⁺ ${fmt(c.na,1)} mmol/L</span>
+          <span class="item">K⁺ ${fmt(c.k,2)} mmol/L</span>
+          <span class="item">Cl⁻ ${fmt(c.cl,1)} mmol/L</span>
+          <span class="item">Ca²⁺ ${fmt(c.ca,2)} mmol/L</span>
+          <span class="item">HCO₃⁻ ${fmt(c.hco3,1)} mmol/L</span>
+        </div>`;
+      }
+
+      html += `<div class="crrt-legend">
+        <span><b style="color:var(--red);">红色 ↑/↓</b>：血气存在异常，需处理</span>
+        <span><b style="color:var(--amber);">黄色 ↑/↓</b>：血气基本正常，仅为处方优化（微调）</span>
+        <span><b style="color:var(--green);">绿色 —</b>：维持当前处方</span>
+      </div>`;
+
+      for (const a of crrtResult.alerts) {
+        html += `<div class="crrt-alert ${a.level}">${a.text}</div>`;
+      }
+
+      if (crrtResult.rows.length) {
+        html += `<table class="crrt-table">
+          <thead><tr><th style="width:15%;">项目</th><th style="width:20%;">当前处方 / 估算浓度</th><th style="width:10%;">方向</th><th>具体建议</th><th style="width:22%;">依据</th></tr></thead><tbody>`;
+        for (const r of crrtResult.rows) {
+          let actClass, actLabel;
+          if (r.action === "keep") {
+            actClass = "action-keep"; actLabel = "— 维持";
+          } else if (r.action === "caution") {
+            actClass = "action-caution"; actLabel = "⚠ 注意";
+          } else if (r.tone === "danger") {
+            actClass = r.action === "up" ? "action-up" : "action-down";
+            actLabel = r.action === "up" ? "↑ 上调" : "↓ 下调";
+          } else {
+            actClass = "action-caution";
+            actLabel = r.action === "up" ? "↑ 上调（微调）" : "↓ 下调（微调）";
+          }
+          html += `<tr>
+            <td><strong>${r.ion}</strong></td>
+            <td>${r.current}</td>
+            <td class="${actClass}">${actLabel}</td>
+            <td>${r.advice}</td>
+            <td style="color:var(--muted);font-size:12px;">${r.basis}</td>
+          </tr>`;
+        }
+        html += `</tbody></table>`;
+      }
+
+      html += `<p class="note" style="margin-top:12px;">以上建议基于当前血气值、您填写的置换液总量和加入药物量计算，<strong>不替代床旁评估和处方权</strong>。每次调整后建议 2–6 小时内复查血气/电解质；RCA 时加密滤器后 iCa 和体内 iCa 监测。5% 碳酸氢钠须与含钙/镁溶液分开加入，避免钙镁沉淀。</p>`;
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+  }
+
+  /* ==================== 9. 事件与入口 ==================== */
+  const inputEl = document.getElementById("input");
+  const fio2El = document.getElementById("fio2");
+  const hintEl = document.getElementById("fio2-hint");
+  const albuminEl = document.getElementById("albumin");
+  const runBtn = document.getElementById("run");
+  const errorEl = document.getElementById("error");
+  const resultsEl = document.getElementById("results");
+
+  let fio2Unit = "percent";
+
+  document.querySelectorAll(".unit-toggle button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".unit-toggle button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      fio2Unit = btn.dataset.unit;
+      if (fio2Unit === "percent") { fio2El.min = 21; fio2El.max = 100; fio2El.step = 1; fio2El.value = 21; hintEl.textContent = "当前：21%（室内空气）"; }
+      else { fio2El.min = 0.21; fio2El.max = 1.0; fio2El.step = 0.01; fio2El.value = 0.21; hintEl.textContent = "当前：0.21（室内空气）"; }
+    });
+  });
+
+  fio2El.addEventListener("input", () => {
+    const v = parseFloat(fio2El.value);
+    hintEl.textContent = fio2Unit === "percent" ? (isNum(v) ? `当前：${v}%` : "请输入 21–100") : (isNum(v) ? `当前：${v}（小数）` : "请输入 0.21–1.0");
+  });
+
+  const crrtEnable = document.getElementById("crrt-enable");
+  const crrtForm = document.getElementById("crrt-form");
+  const anticoagEl = document.getElementById("crrt-anticoag");
+  const presetEl = document.getElementById("crrt-preset");
+  const baseNaEl = document.getElementById("crrt-base-na");
+  const baseClEl = document.getElementById("crrt-base-cl");
+  const baseKEl = document.getElementById("crrt-base-k");
+  const baseCaEl = document.getElementById("crrt-base-ca");
+  const caWarnEl = document.getElementById("ca-warn-hint");
+
+  crrtEnable.addEventListener("change", () => crrtForm.classList.toggle("open", crrtEnable.checked));
+
+  /* 配方预设填充 */
+  presetEl.addEventListener("change", () => {
+    const p = PRESETS[presetEl.value];
+    if (p) {
+      baseNaEl.value = p.na;
+      baseClEl.value = p.cl;
+      baseKEl.value = p.k;
+      baseCaEl.value = p.ca;
+      updateBaseCaHint();
+    }
+  });
+
+  /* 抗凝方式切换：RCA 专项参数显示/隐藏 + 钙浓度提示 */
+  function updateRcaVisibility() {
+    const isRCA = anticoagEl.value === "rca";
+    document.querySelectorAll(".rca-only").forEach(el => {
+      el.style.display = isRCA ? "" : "none";
+    });
+  }
+  function updateBaseCaHint() {
+    const isRCA = anticoagEl.value === "rca";
+    const baseCa = parseFloat(baseCaEl.value);
+    if (isRCA && isNum(baseCa) && baseCa > 0.1) {
+      caWarnEl.style.display = "block";
+      caWarnEl.textContent = `⚠ RCA 时置换液通常不加钙，当前基础 Ca²⁺ 为 ${baseCa} mmol/L，请确认是否改用无钙配方。`;
+    } else {
+      caWarnEl.style.display = "none";
+    }
+  }
+  anticoagEl.addEventListener("change", () => { updateRcaVisibility(); updateBaseCaHint(); });
+  baseCaEl.addEventListener("input", updateBaseCaHint);
+  updateRcaVisibility();
+  updateBaseCaHint();
+
+  function readCRRT() {
+    const val = (id) => {
+      const el = document.getElementById(id);
+      if (!el || el.value === "") return null;
+      const n = parseFloat(el.value);
+      return isNum(n) ? n : null;
+    };
+    return {
+      enabled: crrtEnable.checked,
+      weight: val("crrt-weight"),
+      anticoag: anticoagEl.value,
+      dose: val("crrt-dose"),
+      totalVolume: val("crrt-volume"),
+      baseNa: val("crrt-base-na") ?? 113,
+      baseCl: val("crrt-base-cl") ?? 118,
+      baseK: val("crrt-base-k") ?? 0,
+      baseCa: val("crrt-base-ca") ?? 0,
+      kcl_g: val("crrt-kcl") ?? 0,
+      nacl_g: val("crrt-nacl") ?? 0,
+      naHCO3_ml: val("crrt-nahco3") ?? 0,
+      caType: document.getElementById("crrt-ca-type").value,
+      ca_g: val("crrt-ca-g") ?? 0,
+      extraNaHCO3: val("crrt-extra-nahco3"),
+      extraK: val("crrt-extra-k"),
+      citrate: val("crrt-citrate"),
+      caRate: val("crrt-ca-rate"),
+      postFilterICa: val("crrt-postfilter-ica"),
+    };
+  }
+
+  runBtn.addEventListener("click", () => {
+    errorEl.style.display = "none";
+    resultsEl.style.display = "none";
+    const text = inputEl.value.trim();
+    if (!text) { errorEl.textContent = "请先粘贴血气分析结果。"; errorEl.style.display = "block"; return; }
+    const data = parseBloodGas(text);
+    if (Object.keys(data).length === 0) { errorEl.textContent = "未能解析出任何指标。请检查格式，例如：“钠离子:140.0::mmol/L”。"; errorEl.style.display = "block"; return; }
+
+    const hasCore = data.pH && data.pCO2 && data.HCO3;
+    if (!hasCore) {
+      const missing = [];
+      if (!data.pH) missing.push("pH（血液酸碱度）");
+      if (!data.pCO2) missing.push("PaCO₂（二氧化碳分压）");
+      if (!data.HCO3) missing.push("HCO₃⁻（实际碳酸氢盐）");
+      errorEl.textContent = `缺少核心酸碱指标：${missing.join("、")}。酸碱分析需要这三项。`;
+      errorEl.style.display = "block"; return;
+    }
+
+    let fio2Val = parseFloat(fio2El.value);
+    if (!isNum(fio2Val)) { errorEl.textContent = "请输入有效的 FiO₂ 数值。"; errorEl.style.display = "block"; return; }
+    let fio2Percent;
+    if (fio2Unit === "percent") {
+      if (fio2Val < 21 || fio2Val > 100) { errorEl.textContent = "FiO₂ 百分比应在 21–100 之间。"; errorEl.style.display = "block"; return; }
+      fio2Percent = fio2Val;
+    } else {
+      if (fio2Val < 0.21 || fio2Val > 1.0) { errorEl.textContent = "FiO₂ 小数应在 0.21–1.0 之间。"; errorEl.style.display = "block"; return; }
+      fio2Percent = fio2Val * 100;
+    }
+
+    const albuminRaw = albuminEl.value === "" ? null : parseFloat(albuminEl.value);
+    const albumin = isNum(albuminRaw) ? albuminRaw : null;
+
+    try {
+      const res = analyze(data, fio2Percent, albumin);
+      let crrtResult = null;
+      const crrt = readCRRT();
+      if (crrt.enabled) crrtResult = analyzeCRRT(data, crrt);
+      render(data, res, crrtResult);
+      resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) {
+      errorEl.textContent = "分析过程中出现错误：" + e.message;
+      errorEl.style.display = "block";
+    }
+  });
+})();
+</script>
+</body>
+</html>
